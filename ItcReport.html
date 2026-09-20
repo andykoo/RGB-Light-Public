@@ -1,0 +1,982 @@
+    <div id="personalReportModal" class="fixed inset-0 bg-black/50 z-[85] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                    <h3 class="text-xl font-black text-slate-800">匯出個人報告</h3>
+                    <p class="text-xs text-slate-500 mt-1">先勾選座號與報告內容，再產生一個人一頁的列印版。</p>
+                </div>
+                <button onclick="closePersonalReportModal()" class="text-slate-400 hover:text-slate-700 text-xl leading-none">✕</button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar space-y-5">
+                <div class="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+                    <section class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <div>
+                                <div class="text-sm font-black text-slate-800">選擇座號</div>
+                                <div class="text-xs text-slate-500">可全選，或只匯出特定學生。</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="setPersonalReportSeatSelection(true)" class="btn btn-xs btn-secondary">全選</button>
+                                <button type="button" onclick="setPersonalReportSeatSelection(false)" class="btn btn-xs btn-secondary">清空</button>
+                            </div>
+                        </div>
+                        <div id="personalReportSeatList" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2"></div>
+                    </section>
+
+                    <section class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div class="text-sm font-black text-slate-800 mb-1">勾選報告內容</div>
+                        <div class="text-xs text-slate-500 mb-3">每位學生固定一頁，勾選的項目會依序排入該頁。</div>
+                        <div id="personalReportOptionList" class="grid gap-2"></div>
+                    </section>
+                </div>
+                <div class="rounded-xl border border-dashed border-slate-300 bg-white p-4">
+                    <div class="text-sm font-black text-slate-800">輸出說明</div>
+                    <div class="mt-2 text-xs text-slate-600 leading-6">
+                        1. 會依目前活動資料產生報告。
+                        2. 若當前已有 ITC 統計快取，會帶入個人 ITC 與比較分析。
+                        3. 輸出為列印版，可直接另存 PDF。
+                    </div>
+                </div>
+                <div id="personalReportAnalyticsStatus" class="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-700">準備載入 ITC 個人資料...</div>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button onclick="closePersonalReportModal()" class="btn btn-secondary">取消</button>
+                <button id="btnExportPersonalReports" onclick="exportPersonalReports()" class="btn btn-primary">產生列印版</button>
+            </div>
+        </div>
+    </div>
+<script>
+        const PERSONAL_REPORT_OPTIONS = [
+            { key: 'basic', label: '基本資料', checked: true },
+            { key: 'lights', label: '燈號與拍照摘要', checked: true },
+            { key: 'itc', label: 'ITC 六類統計', checked: true },
+            { key: 'engagement', label: '參與度與比較', checked: true },
+            { key: 'charts', label: 'ITC 圖表區', checked: true },
+            { key: 'classTimeline', label: '全班行為時序圖', checked: false },
+            { key: 'cards', label: 'ITC 紀錄', checked: true },
+            { key: 'quality', label: '學業品質評價', checked: true },
+            { key: 'ai', label: '建議', checked: true }
+        ];
+        const ITC_DIAG_SCORE_MAP = { ON_ACTIVE: 1, SEEK_HELP: 0.82, ON_PASSIVE: 0.58, UNCLEAR: 0.35, OFF_TASK: 0.16, DISRUPTIVE: 0.04 };
+        let itcAnalyticsCache = null;
+        let itcAnalyticsPreset = 'today';
+        let itcDiagnosticMode = 'sample';
+        let itcSamplingWindowMinutes = 5;
+        let activitySubmissionsCache = [];
+        function renderItcAnalytics(data) { itcAnalyticsCache = data || null; }
+        function getTaipeiDateKey(ts) {
+            if (!ts) return '';
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Taipei',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).formatToParts(new Date(ts));
+            const map = {};
+            parts.forEach(part => {
+                if (part.type !== 'literal') map[part.type] = part.value;
+            });
+            return map.year && map.month && map.day ? `${map.year}-${map.month}-${map.day}` : '';
+        }
+
+        function normalizeItcDayKey(dayKeyRaw) {
+            const text = String(dayKeyRaw == null ? '' : dayKeyRaw).trim();
+            if (!text) return '';
+
+            const direct = text.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (direct) return direct[1];
+
+            const parsedTs = Date.parse(text);
+            if (!Number.isNaN(parsedTs)) {
+                return getTaipeiDateKey(parsedTs);
+            }
+
+            return text;
+        }
+
+        function getTaipeiDateRangeTs(dateFromStr, dateToStr) {
+            const fromText = String(dateFromStr || '').trim();
+            const toText = String(dateToStr || '').trim();
+            if (!fromText || !toText) return { fromTs: 0, toTs: 0 };
+            const fromTs = Date.parse(`${fromText}T00:00:00+08:00`);
+            const toTs = Date.parse(`${toText}T23:59:59+08:00`);
+            return {
+                fromTs: Number.isNaN(fromTs) ? 0 : fromTs,
+                toTs: Number.isNaN(toTs) ? 0 : toTs
+            };
+        }
+
+        function setItcAnalyticsPreset(preset) {
+            itcAnalyticsPreset = preset;
+            const todayKey = getTaipeiDateKey(Date.now());
+            const fromEl = document.getElementById('itcDateFrom');
+            const toEl = document.getElementById('itcDateTo');
+            if (!fromEl || !toEl) return;
+
+            if (preset === 'today') {
+                fromEl.value = todayKey;
+                toEl.value = todayKey;
+            } else if (preset === 'yesterday') {
+                const y = new Date(Date.now() - 24 * 3600 * 1000);
+                const yKey = getTaipeiDateKey(y.getTime());
+                fromEl.value = yKey;
+                toEl.value = yKey;
+            } else if (preset === 'week') {
+                const now = new Date();
+                const day = now.getDay(); // 0:Sun
+                const diffToMon = day === 0 ? 6 : day - 1;
+                const monTs = now.getTime() - diffToMon * 24 * 3600 * 1000;
+                fromEl.value = getTaipeiDateKey(monTs);
+                toEl.value = todayKey;
+            }
+
+            ['today', 'yesterday', 'week', 'custom'].forEach(key => {
+                const btn = document.getElementById('itcPreset' + key.charAt(0).toUpperCase() + key.slice(1));
+                if (!btn) return;
+                const active = key === preset;
+                btn.classList.toggle('bg-blue-600', active);
+                btn.classList.toggle('text-white', active);
+                btn.classList.toggle('border-blue-600', active);
+                btn.classList.toggle('bg-white', !active);
+                btn.classList.toggle('text-slate-700', !active);
+            });
+
+            refreshItcAnalytics(true);
+        }
+
+        function formatDurationSmart(seconds) {
+            const sec = Number(seconds || 0);
+            if (!Number.isFinite(sec) || sec < 0) return '--';
+            if (sec < 60) return `${Math.round(sec)} 秒`;
+            if (sec < 3600) {
+                const min = sec / 60;
+                return `${min < 10 ? min.toFixed(1) : Math.round(min)} 分鐘`;
+            }
+            const hr = sec / 3600;
+            return `${hr < 10 ? hr.toFixed(1) : Math.round(hr)} 小時`;
+        }
+
+        function buildSampledItcWindows(data, windowMinutes) {
+            const events = getItcAnalyticsEvents(data);
+            const timelineMeta = (data && data.timelineMeta) || {};
+            const classStartTs = Number(data && data.classStartTs || 0);
+            const totalSeats = getItcAnalyticsTotalSeats(data, events);
+            const startTs = Number(timelineMeta.startTs || 0);
+            const endTs = Number(timelineMeta.endTs || 0);
+            if (!startTs || !endTs || endTs < startTs || totalSeats <= 0) {
+                return { windows: [], seatRows: [], classAverages: { rates: { aetRate: 0, petRate: 0, oftRate: 0, helpToActiveRate: 0 } } };
+            }
+
+            const windowMs = Math.max(1, Number(windowMinutes || 5)) * 60000;
+            const windowCount = Math.max(1, Math.ceil((endTs - startTs + 1) / windowMs));
+            const bySeat = {};
+            events.forEach(ev => {
+                const seatNo = Number(ev.seatNo || 0);
+                if (!bySeat[seatNo]) bySeat[seatNo] = [];
+                bySeat[seatNo].push(ev);
+            });
+
+            const seatWindows = [];
+            const seatRows = [];
+            for (let seatNo = 1; seatNo <= totalSeats; seatNo++) {
+                const seq = (bySeat[seatNo] || []).slice().sort((a, b) => a.ts - b.ts);
+                const windows = [];
+                let lastCode = '';
+                let idx = 0;
+                for (let i = 0; i < windowCount; i++) {
+                    const winStart = startTs + i * windowMs;
+                    const winEndExclusive = i === windowCount - 1 ? endTs + 1 : (winStart + windowMs);
+                    const bucket = [];
+                    while (idx < seq.length && Number(seq[idx].ts || 0) < winEndExclusive) {
+                        if (Number(seq[idx].ts || 0) >= winStart) bucket.push(seq[idx]);
+                        idx += 1;
+                    }
+                    let code = '';
+                    let source = 'empty';
+                    if (bucket.length) {
+                        code = selectRepresentativeItcCode(bucket);
+                        lastCode = code || lastCode;
+                        source = 'window';
+                    } else if (lastCode) {
+                        code = lastCode;
+                        source = 'carry';
+                    }
+                    windows.push({
+                        seatNo: seatNo,
+                        startTs: winStart,
+                        endTs: winEndExclusive - 1,
+                        code: code,
+                        source: source
+                    });
+                }
+                seatWindows.push({ seatNo: seatNo, windows: windows });
+                const representativeSeq = windows
+                    .filter(win => String(win.code || ''))
+                    .map(win => ({ ts: Number(win.startTs || 0), code: String(win.code || '') }));
+                seatRows.push(buildItcSeatRowFromSequence(seatNo, representativeSeq, classStartTs));
+            }
+
+            const activeRows = seatRows.filter(row => Number(row.total || 0) > 0);
+            const divisor = activeRows.length || 1;
+            return {
+                windows: seatWindows,
+                seatRows: seatRows,
+                classAverages: {
+                    rates: {
+                        aetRate: Number((activeRows.reduce((acc, row) => acc + Number(row.aetRate || 0), 0) / divisor).toFixed(2)),
+                        petRate: Number((activeRows.reduce((acc, row) => acc + Number(row.petRate || 0), 0) / divisor).toFixed(2)),
+                        oftRate: Number((activeRows.reduce((acc, row) => acc + Number(row.oftRate || 0), 0) / divisor).toFixed(2)),
+                        helpToActiveRate: Number((activeRows.reduce((acc, row) => acc + Number(row.helpToActiveRate || 0), 0) / divisor).toFixed(2))
+                    }
+                }
+            };
+        }
+
+        function getItcAnalyticsEvents(data) {
+            const list = Array.isArray(data && data.events) ? data.events.slice() : [];
+            return list
+                .map(ev => ({
+                    ts: Number(ev && ev.ts || 0),
+                    seatNo: Number(ev && ev.seatNo || 0),
+                    code: String(ev && ev.code || ''),
+                    codeNo: Number(ev && ev.codeNo || 0)
+                }))
+                .filter(ev => ev.ts > 0 && ev.seatNo > 0 && ev.code)
+                .sort((a, b) => a.ts - b.ts || a.seatNo - b.seatNo);
+        }
+
+        function getItcAnalyticsTotalSeats(data, events) {
+            const seatAnalytics = (data && data.seatAnalytics) || {};
+            const fromAnalytics = Number(seatAnalytics.totalSeats || 0);
+            if (fromAnalytics > 0) return fromAnalytics;
+            const maxEventSeat = (events || []).reduce((acc, ev) => Math.max(acc, Number(ev.seatNo || 0)), 0);
+            const currentGridSeats = Array.isArray(currentSeatData) ? currentSeatData.length : 0;
+            return Math.max(maxEventSeat, currentGridSeats, 0);
+        }
+
+        function selectRepresentativeItcCode(events) {
+            const counts = {};
+            let lastTs = 0;
+            let lastCode = '';
+            (events || []).forEach(ev => {
+                const code = String(ev && ev.code || '');
+                if (!code) return;
+                counts[code] = Number(counts[code] || 0) + 1;
+                const ts = Number(ev.ts || 0);
+                if (ts >= lastTs) {
+                    lastTs = ts;
+                    lastCode = code;
+                }
+            });
+            const ranked = Object.entries(counts).sort((a, b) => {
+                const diff = Number(b[1] || 0) - Number(a[1] || 0);
+                if (diff !== 0) return diff;
+                if (String(a[0]) === lastCode) return -1;
+                if (String(b[0]) === lastCode) return 1;
+                return String(a[0]).localeCompare(String(b[0]));
+            });
+            return ranked.length ? String(ranked[0][0] || '') : '';
+        }
+
+        function buildItcSeatRowFromSequence(seatNo, seq, classStartTs) {
+            const counts = {
+                ON_ACTIVE: 0,
+                ON_PASSIVE: 0,
+                SEEK_HELP: 0,
+                UNCLEAR: 0,
+                OFF_TASK: 0,
+                DISRUPTIVE: 0
+            };
+            let helpTotal = 0;
+            let helpToActive = 0;
+            let firstActiveTs = null;
+
+            (seq || []).forEach((item, idx) => {
+                const code = String(item && item.code || '');
+                if (!counts.hasOwnProperty(code)) return;
+                counts[code] += 1;
+                if ((code === 'ON_ACTIVE' || code === 'SEEK_HELP') && firstActiveTs == null && Number(item.ts || 0) > 0) {
+                    firstActiveTs = Number(item.ts || 0);
+                }
+                if (code === 'SEEK_HELP') {
+                    helpTotal += 1;
+                    const next = seq.slice(idx + 1).find(ev => String(ev && ev.code || '') !== 'UNCLEAR');
+                    if (next && String(next.code || '') === 'ON_ACTIVE') helpToActive += 1;
+                }
+            });
+
+            const total = (seq || []).length;
+            const aetCount = Number(counts.ON_ACTIVE || 0) + Number(counts.SEEK_HELP || 0);
+            const petCount = Number(counts.ON_PASSIVE || 0);
+            const oftCount = Number(counts.OFF_TASK || 0) + Number(counts.DISRUPTIVE || 0);
+            const denom = aetCount + petCount + oftCount;
+            const aetRate = denom > 0 ? Number(((aetCount * 100) / denom).toFixed(2)) : 0;
+            const petRate = denom > 0 ? Number(((petCount * 100) / denom).toFixed(2)) : 0;
+            const oftRate = denom > 0 ? Number(((oftCount * 100) / denom).toFixed(2)) : 0;
+            const itcScore = Math.max(0, Math.min(100, Number((aetRate - oftRate * 0.5 + petRate * 0.1).toFixed(2))));
+            const helpToActiveRate = helpTotal > 0 ? Number(((helpToActive * 100) / helpTotal).toFixed(2)) : 0;
+            const latencySec = firstActiveTs != null && Number(classStartTs || 0) > 0
+                ? Math.max(0, Number(((firstActiveTs - Number(classStartTs || 0)) / 1000).toFixed(2)))
+                : null;
+
+            return {
+                seatNo: Number(seatNo || 0),
+                total: total,
+                counts: counts,
+                aetRate: aetRate,
+                petRate: petRate,
+                oftRate: oftRate,
+                itcScore: itcScore,
+                helpCount: Number(counts.SEEK_HELP || 0),
+                helpToActiveRate: helpToActiveRate,
+                latencySec: latencySec
+            };
+        }
+
+        function getItcDiagnosticAnalytics(data) {
+            const seatAnalytics = (data && data.seatAnalytics) || {};
+            if (itcDiagnosticMode === 'sample') {
+                return buildSampledItcWindows(data, itcSamplingWindowMinutes);
+            }
+            return {
+                windows: buildSampledItcWindows(data, itcSamplingWindowMinutes).windows,
+                seatRows: Array.isArray(seatAnalytics.seats) ? seatAnalytics.seats.slice() : [],
+                classAverages: seatAnalytics.classAverages || { rates: { aetRate: 0, petRate: 0, oftRate: 0, helpToActiveRate: 0 } }
+            };
+        }
+
+        function getItcDiagnosticZone(aetRate, oftRate, avgAet, avgOft) {
+            const aet = Number(aetRate || 0);
+            const oft = Number(oftRate || 0);
+            const centerAet = Number(avgAet || 0);
+            const centerOft = Number(avgOft || 0);
+            if (aet >= centerAet && oft <= centerOft) return { label: '高續航探索區', fill: '#dcfce7', stroke: '#16a34a' };
+            if (aet < centerAet && oft > centerOft) return { label: '任務錯位診斷區', fill: '#fee2e2', stroke: '#dc2626' };
+            if (aet >= centerAet && oft > centerOft) return { label: '動態觀察區', fill: '#fef3c7', stroke: '#d97706' };
+            return { label: '環境支持待強化區', fill: '#e0e7ff', stroke: '#4f46e5' };
+        }
+
+        function getItcHeatmapColor(code) {
+            const map = {
+                ON_ACTIVE: { bg: '#10b981', fg: '#ffffff' },
+                SEEK_HELP: { bg: '#0ea5e9', fg: '#ffffff' },
+                ON_PASSIVE: { bg: '#d9f99d', fg: '#365314' },
+                UNCLEAR: { bg: '#e2e8f0', fg: '#475569' },
+                OFF_TASK: { bg: '#fed7aa', fg: '#9a3412' },
+                DISRUPTIVE: { bg: '#fdba74', fg: '#7c2d12' },
+                EMPTY: { bg: '#f8fafc', fg: '#94a3b8' }
+            };
+            return map[String(code || 'EMPTY')] || map.EMPTY;
+        }
+
+        function buildTodayPhotoCountMap(submissions) {
+            const todayKey = getTaipeiDateKey(Date.now());
+            const counts = {};
+            (submissions || []).forEach(item => {
+                const seatNo = Number(item && item.seatNo);
+                const uploadAt = Number(item && item.uploadAt || 0);
+                if (!seatNo || !uploadAt) return;
+                if (getTaipeiDateKey(uploadAt) !== todayKey) return;
+                counts[seatNo] = Number(counts[seatNo] || 0) + 1;
+            });
+            return counts;
+        }
+
+        function parseItcCountsJsonSafe(jsonText) {
+            try {
+                return JSON.parse(String(jsonText || '{}')) || {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function getSeatTodayItcCount(seat) {
+            if (!seat || !seat.itcLastCode) return 0;
+            const todayKey = getTaipeiDateKey(Date.now());
+            const dayKey = normalizeItcDayKey(seat.itcDayKey);
+
+            if (dayKey === todayKey) {
+                const total = Number(seat.itcDayTotal || 0);
+                if (total > 0) return total;
+                const summed = sumItcCounts(parseItcCountsJsonSafe(seat.itcDayCountsJson));
+                if (summed > 0) return summed;
+            }
+
+            const lastAtKey = getTaipeiDateKey(Number(seat.itcLastAt || 0));
+            if (lastAtKey === todayKey) {
+                const summed = sumItcCounts(parseItcCountsJsonSafe(seat.itcDayCountsJson));
+                if (summed > 0) return summed;
+                const total = Number(seat.itcDayTotal || 0);
+                if (total > 0) return total;
+                return 1;
+            }
+
+            return 0;
+        }
+
+        function openPersonalReportModal() {
+            if (!currentActivity || !Array.isArray(currentSeatData) || !currentSeatData.length) {
+                alert('請先選擇活動，再匯出個人報告。');
+                return;
+            }
+            const seatList = document.getElementById('personalReportSeatList');
+            const optionList = document.getElementById('personalReportOptionList');
+            if (seatList) {
+                seatList.innerHTML = currentSeatData
+                    .slice()
+                    .sort((a, b) => Number(a.seatNo || 0) - Number(b.seatNo || 0))
+                    .map(seat => `<label class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                        <input type="checkbox" class="personal-report-seat" value="${Number(seat.seatNo || 0)}" checked>
+                        <span>座號 ${Number(seat.seatNo || 0)}</span>
+                    </label>`).join('');
+            }
+            if (optionList) {
+                optionList.innerHTML = PERSONAL_REPORT_OPTIONS.map(opt => `<label class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                    <input type="checkbox" class="personal-report-option" value="${opt.key}" ${opt.checked ? 'checked' : ''}>
+                    <span>${opt.label}</span>
+                </label>`).join('');
+            }
+            const modal = document.getElementById('personalReportModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+            preparePersonalReportAnalytics();
+        }
+
+        function preparePersonalReportAnalytics() {
+            const status = document.getElementById('personalReportAnalyticsStatus');
+            const button = document.getElementById('btnExportPersonalReports');
+            if (Array.isArray(itcPendingEvents) && itcPendingEvents.length > 0) {
+                if (status) status.textContent = '正在儲存最新 ITC 紀錄...';
+                if (button) button.disabled = true;
+                if (itcFlushTimer) {
+                    clearTimeout(itcFlushTimer);
+                    itcFlushTimer = null;
+                }
+                flushItcEvents(err => {
+                    if (err) {
+                        if (status) status.textContent = '最新 ITC 紀錄儲存失敗，請稍後重試。';
+                        if (button) button.disabled = false;
+                        return;
+                    }
+                    preparePersonalReportAnalytics();
+                });
+                return;
+            }
+            // Always reload: the teacher may have recorded more ITC events since
+            // the report modal was last opened, even for the same activity.
+            itcAnalyticsCache = null;
+            if (status) status.textContent = '正在載入 ITC 個人資料...';
+            if (button) button.disabled = true;
+            const fromEl = document.getElementById('itcDateFrom');
+            const toEl = document.getElementById('itcDateTo');
+            if (!fromEl || !toEl || !fromEl.value || !toEl.value) setItcAnalyticsPreset('today');
+            const range = getTaipeiDateRangeTs(fromEl && fromEl.value, toEl && toEl.value);
+            const successHandler = res => {
+                renderItcAnalytics(res || {});
+                if (status) status.textContent = `ITC 個人資料已載入，共 ${Number(res && res.summary && res.summary.total || 0)} 筆事件。`;
+                if (button) button.disabled = false;
+            };
+            const failureHandler = err => {
+                console.error('personal report ITC analytics load failed:', err);
+                if (status) status.textContent = 'ITC 時序資料載入失敗，報告將改用座位表累計資料。';
+                if (button) button.disabled = false;
+            };
+            const runner = google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler);
+            if (String(currentActivityCode || '').startsWith('G-')) {
+                runner.adminGuestGetItcAnalytics(currentActivityCode, range.fromTs, range.toTs);
+            } else {
+                runner.adminGetItcAnalytics(AUTH_TOKEN, currentActivityCode, range.fromTs, range.toTs);
+            }
+        }
+
+        function closePersonalReportModal() {
+            const modal = document.getElementById('personalReportModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        function setPersonalReportSeatSelection(checked) {
+            document.querySelectorAll('.personal-report-seat').forEach(node => {
+                node.checked = !!checked;
+            });
+        }
+
+        function getPersonalReportSeatAnalyticsMap() {
+            const rows = (itcAnalyticsCache && itcAnalyticsCache.seatAnalytics && Array.isArray(itcAnalyticsCache.seatAnalytics.seats))
+                ? itcAnalyticsCache.seatAnalytics.seats
+                : [];
+            const map = {};
+            rows.forEach(row => {
+                map[Number(row.seatNo || 0)] = row;
+            });
+            (currentSeatData || []).forEach(seat => {
+                const seatNo = Number(seat && seat.seatNo || 0);
+                if (!seatNo || map[seatNo]) return;
+                const counts = parseItcCountsJsonSafe(seat.itcCountsJson);
+                const aet = Number(counts.ON_ACTIVE || 0) + Number(counts.SEEK_HELP || 0);
+                const pet = Number(counts.ON_PASSIVE || 0);
+                const oft = Number(counts.OFF_TASK || 0) + Number(counts.DISRUPTIVE || 0);
+                const total = aet + pet + oft + Number(counts.UNCLEAR || 0);
+                if (!total && !Number(seat.itcTotal || 0)) return;
+                map[seatNo] = {
+                    seatNo,
+                    counts,
+                    total: Math.max(total, Number(seat.itcTotal || 0)),
+                    helpCount: Number(counts.SEEK_HELP || 0),
+                    aetRate: total ? aet * 100 / total : 0,
+                    petRate: total ? pet * 100 / total : 0,
+                    oftRate: total ? oft * 100 / total : 0,
+                    itcScore: total ? Math.max(0, Math.min(100, ((aet + pet * 0.5) * 100 / total))) : 0,
+                    _source: 'seat-status-cumulative'
+                };
+            });
+            return map;
+        }
+
+        function getPersonalReportSelectedOptions() {
+            return Array.from(document.querySelectorAll('.personal-report-option:checked')).map(node => String(node.value || ''));
+        }
+
+        function buildPersonalEngagementHtml(analyticsRow) {
+            if (!analyticsRow || !analyticsRow.counts) {
+                return '<div class="pr-note">目前沒有個人 ITC 參與度資料。</div>';
+            }
+            const counts = analyticsRow.counts || {};
+            const aet = Number(counts.ON_ACTIVE || 0) + Number(counts.SEEK_HELP || 0);
+            const pet = Number(counts.ON_PASSIVE || 0);
+            const oft = Number(counts.OFF_TASK || 0) + Number(counts.DISRUPTIVE || 0);
+            const total = aet + pet + oft;
+            if (total <= 0) {
+                return '<div class="pr-note">目前沒有足夠的個人事件資料。</div>';
+            }
+            const p1 = (aet * 100 / total);
+            const p2 = (pet * 100 / total);
+            const donutStyle = `background:conic-gradient(#10b981 0 ${p1}%, #84cc16 ${p1}% ${p1 + p2}%, #f43f5e ${p1 + p2}% 100%)`;
+            return `<div class="pr-engagement">
+                <div class="pr-donut-wrap">
+                    <div class="pr-donut" style="${donutStyle}"></div>
+                    <div class="pr-donut-hole">自己</div>
+                </div>
+                <div class="pr-engagement-meta">
+                    <div><strong>AET</strong> 主動投入：${aet} 次（${p1.toFixed(1)}%）</div>
+                    <div><strong>PET</strong> 被動投入：${pet} 次（${(pet * 100 / total).toFixed(1)}%）</div>
+                    <div><strong>OFT</strong> 離題 / 干擾：${oft} 次（${(oft * 100 / total).toFixed(1)}%）</div>
+                    <div class="pr-note">這裡只計算這位學生自己的 ITC 次數，不混入全班總筆數。</div>
+                </div>
+            </div>`;
+        }
+
+        function buildPersonalQuadrantSvg(analyticsRow, derived) {
+            if (!analyticsRow) return '<div class="pr-note">目前沒有散佈圖資料。</div>';
+            const classRates = (derived && derived.classAverages && derived.classAverages.rates) || {};
+            const avgAet = Number(classRates.aetRate || 0);
+            const avgOft = Number(classRates.oftRate || 0);
+            const w = 520;
+            const h = 250;
+            const m = { left: 48, right: 16, top: 24, bottom: 30 };
+            const innerW = w - m.left - m.right;
+            const innerH = h - m.top - m.bottom;
+            const x = v => m.left + (Math.max(0, Math.min(100, Number(v || 0))) / 100) * innerW;
+            const y = v => m.top + (1 - Math.max(0, Math.min(100, Number(v || 0))) / 100) * innerH;
+            const centerX = x(avgAet);
+            const centerY = y(avgOft);
+            const zone = getItcDiagnosticZone(Number(analyticsRow.aetRate || 0), Number(analyticsRow.oftRate || 0), avgAet, avgOft);
+            let html = '';
+            [['#fff1f2', m.left, m.top, centerX - m.left, centerY - m.top], ['#fffbeb', centerX, m.top, w - m.right - centerX, centerY - m.top], ['#eef2ff', m.left, centerY, centerX - m.left, h - m.bottom - centerY], ['#ecfdf5', centerX, centerY, w - m.right - centerX, h - m.bottom - centerY]]
+                .forEach(item => { html += `<rect x="${item[1]}" y="${item[2]}" width="${Math.max(0, item[3])}" height="${Math.max(0, item[4])}" fill="${item[0]}"/>`; });
+            for (let tick = 0; tick <= 100; tick += 20) {
+                html += `<line x1="${x(tick)}" y1="${m.top}" x2="${x(tick)}" y2="${h - m.bottom}" stroke="#e2e8f0" stroke-width="1"/>`;
+                html += `<line x1="${m.left}" y1="${y(tick)}" x2="${w - m.right}" y2="${y(tick)}" stroke="#e2e8f0" stroke-width="1"/>`;
+            }
+            html += `<line x1="${centerX}" y1="${m.top}" x2="${centerX}" y2="${h - m.bottom}" stroke="#0f172a" stroke-width="1.4" stroke-dasharray="5 4"/>`;
+            html += `<line x1="${m.left}" y1="${centerY}" x2="${w - m.right}" y2="${centerY}" stroke="#0f172a" stroke-width="1.4" stroke-dasharray="5 4"/>`;
+            const cx = x(Number(analyticsRow.aetRate || 0));
+            const cy = y(Number(analyticsRow.oftRate || 0));
+            html += `<circle cx="${cx}" cy="${cy}" r="10" fill="${zone.stroke}" stroke="#fff" stroke-width="2.5"/>`;
+            html += `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">${Number(analyticsRow.seatNo || 0)}</text>`;
+            html += `<text x="${centerX + 6}" y="${m.top + 12}" font-size="10" fill="#334155">全班平均 AET ${avgAet.toFixed(1)}%</text>`;
+            html += `<text x="${w - m.right}" y="${centerY - 6}" font-size="10" fill="#334155" text-anchor="end">全班平均 OFT ${avgOft.toFixed(1)}%</text>`;
+            html += `<text x="${w / 2}" y="${h - 6}" font-size="11" fill="#475569" text-anchor="middle">AET</text>`;
+            html += `<text x="14" y="${h / 2}" font-size="11" fill="#475569" text-anchor="middle" transform="rotate(-90 14 ${h / 2})">OFT</text>`;
+            return `<div class="pr-chart-card"><div class="pr-chart-title">散佈圖位階法（只顯示自己座號）</div><svg viewBox="0 0 ${w} ${h}" class="pr-svg">${html}</svg><div class="pr-note">區域判讀：${zone.label}</div></div>`;
+        }
+
+        function buildPersonalRadarSvg(analyticsRow, derived) {
+            if (!analyticsRow) return '<div class="pr-note">目前沒有雷達圖資料。</div>';
+            const rows = Array.isArray(derived && derived.seatRows) ? derived.seatRows.filter(row => Number(row.total || 0) > 0) : [];
+            const classRates = (derived && derived.classAverages && derived.classAverages.rates) || {};
+            const maxHelp = Math.max(1, ...rows.map(row => Number(row.helpCount || 0)), 1);
+            const axes = [
+                { label: '主動性', seat: Number(analyticsRow.aetRate || 0), avg: Number(classRates.aetRate || 0) },
+                { label: '持續力', seat: Math.max(0, 100 - Number(analyticsRow.oftRate || 0)), avg: Math.max(0, 100 - Number(classRates.oftRate || 0)) },
+                { label: '求助頻率', seat: Number(((Number(analyticsRow.helpCount || 0) / maxHelp) * 100).toFixed(2)), avg: Number((((rows.reduce((acc, item) => acc + Number(item.helpCount || 0), 0) / Math.max(rows.length, 1)) / maxHelp) * 100).toFixed(2)) },
+                { label: '任務穩定度', seat: Number(analyticsRow.itcScore || 0), avg: Number(((Number(classRates.aetRate || 0) - Number(classRates.oftRate || 0) * 0.5 + Number(classRates.petRate || 0) * 0.1).toFixed(2)) || 0) },
+                { label: '抗干擾性', seat: Math.max(0, 100 - Number(analyticsRow.oftRate || 0)), avg: Math.max(0, 100 - Number(classRates.oftRate || 0)) }
+            ];
+            const w = 420;
+            const h = 320;
+            const cx = 210;
+            const cy = 160;
+            const radius = 104;
+            const pointAt = (value, idx, total) => {
+                const angle = (-Math.PI / 2) + (idx * Math.PI * 2 / total);
+                const r = radius * (Math.max(0, Math.min(100, Number(value || 0))) / 100);
+                return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
+            };
+            let html = '';
+            [20, 40, 60, 80, 100].forEach(ring => {
+                const pts = axes.map((_, idx) => pointAt(ring, idx, axes.length));
+                html += `<polygon points="${pts.map(p => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="#e2e8f0" stroke-width="1"/>`;
+            });
+            axes.forEach((axis, idx) => {
+                const end = pointAt(100, idx, axes.length);
+                html += `<line x1="${cx}" y1="${cy}" x2="${end.x}" y2="${end.y}" stroke="#cbd5e1" stroke-width="1"/>`;
+                html += `<text x="${end.x}" y="${end.y - 6}" font-size="11" fill="#475569" text-anchor="middle" font-weight="700">${axis.label}</text>`;
+            });
+            const avgPts = axes.map((axis, idx) => pointAt(axis.avg, idx, axes.length));
+            const seatPts = axes.map((axis, idx) => pointAt(axis.seat, idx, axes.length));
+            html += `<polygon points="${avgPts.map(p => `${p.x},${p.y}`).join(' ')}" fill="rgba(59,130,246,0.18)" stroke="#2563eb" stroke-width="2"/>`;
+            html += `<polygon points="${seatPts.map(p => `${p.x},${p.y}`).join(' ')}" fill="rgba(249,115,22,0.18)" stroke="#ea580c" stroke-width="2"/>`;
+            html += `<text x="20" y="24" font-size="11" fill="#2563eb" font-weight="700">同班其他同學平均</text>`;
+            html += `<text x="20" y="42" font-size="11" fill="#ea580c" font-weight="700">座號 ${Number(analyticsRow.seatNo || 0)}</text>`;
+            return `<div class="pr-chart-card"><div class="pr-chart-title">雷達圖</div><svg viewBox="0 0 ${w} ${h}" class="pr-svg">${html}</svg></div>`;
+        }
+
+        function buildPersonalHeatmapHtml(data, seatNo) {
+            const heat = buildSampledItcWindows(data, itcSamplingWindowMinutes);
+            const seatWindows = Array.isArray(heat.windows) ? heat.windows : [];
+            const selectedRow = seatWindows.find(row => Number(row.seatNo || 0) === Number(seatNo || 0));
+            const activeRows = seatWindows.filter(row => row.windows.some(win => String(win.code || '')));
+            if (!selectedRow || !activeRows.length) return '<div class="pr-note">目前沒有熱力圖資料。</div>';
+            const windowCount = selectedRow.windows.length || 0;
+            const avgScores = [];
+            for (let i = 0; i < windowCount; i++) {
+                let total = 0;
+                let n = 0;
+                activeRows.forEach(row => {
+                    const code = String((row.windows[i] && row.windows[i].code) || '');
+                    if (!code) return;
+                    total += Number(ITC_DIAG_SCORE_MAP[code] || 0);
+                    n += 1;
+                });
+                avgScores.push(n > 0 ? total / n : 0);
+            }
+            const header = Array.from({ length: windowCount }).map((_, idx) => `<div class="pr-heat-cell pr-heat-head">${idx + 1}</div>`).join('');
+            const avgRow = avgScores.map(score => `<div class="pr-heat-cell" style="background:${score >= 0.8 ? '#10b981' : score >= 0.6 ? '#a7f3d0' : score >= 0.4 ? '#fef3c7' : '#fee2e2'};color:${score >= 0.8 ? '#fff' : '#334155'}">${(score * 100).toFixed(0)}</div>`).join('');
+            const seatRow = selectedRow.windows.map(win => {
+                const tone = getItcHeatmapColor(String(win.code || 'EMPTY'));
+                const label = String(win.code || '') ? ((ITC_CODE_META[String(win.code || '')] && ITC_CODE_META[String(win.code || '')].emoji) || '•') : '·';
+                return `<div class="pr-heat-cell" style="background:${tone.bg};color:${tone.fg}">${label}</div>`;
+            }).join('');
+            return `<div class="pr-chart-card"><div class="pr-chart-title">行為穩定度熱力圖（只顯示自己座號與全班）</div>
+                <div class="pr-heat-grid" style="grid-template-columns:52px repeat(${windowCount}, minmax(0,1fr));">
+                    <div></div>${header}
+                    <div class="pr-heat-label">全班</div>${avgRow}
+                    <div class="pr-heat-label">座號 ${Number(seatNo || 0)}</div>${seatRow}
+                </div>
+                <div class="pr-note">時間窗：每 ${itcSamplingWindowMinutes} 分鐘一格。</div>
+            </div>`;
+        }
+
+        function buildPersonalTimelineSvg(data, seatNo) {
+            const points = Array.isArray(data && data.timeline) ? data.timeline.filter(p => Number(p && p.seatNo || 0) === Number(seatNo || 0)) : [];
+            if (!points.length) return '<div class="pr-note">目前沒有行為時序圖資料。</div>';
+            const timelineMeta = (data && data.timelineMeta) || {};
+            const startTs = Number(timelineMeta.startTs || 0);
+            const endTs = Number(timelineMeta.endTs || 0);
+            const xMaxMin = Math.max(1, endTs > startTs ? Number((((endTs - startTs) / 60000)).toFixed(2)) : 1);
+            const w = 620;
+            const h = 150;
+            const m = { left: 42, right: 12, top: 12, bottom: 18 };
+            const innerW = w - m.left - m.right;
+            const innerH = h - m.top - m.bottom;
+            const x = min => m.left + (Math.max(0, Math.min(xMaxMin, min)) / xMaxMin) * innerW;
+            const y = codeNo => m.top + ((6 - codeNo) / 5) * innerH;
+            let html = '';
+            for (let i = 1; i <= 6; i++) {
+                const yy = y(i);
+                html += `<line x1="${m.left}" y1="${yy}" x2="${w - m.right}" y2="${yy}" stroke="#e2e8f0" stroke-width="1"/>`;
+                html += `<text x="${m.left - 8}" y="${yy + 4}" font-size="10" fill="#64748b" text-anchor="end">${i}</text>`;
+            }
+            const coords = points.map(p => ({ x: x(Number(p.minute || 0)), y: y(Number(p.codeNo || 0)), code: String(p.code || '') }));
+            html += `<polyline points="${coords.map(p => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="#2563eb" stroke-width="2.2"/>`;
+            coords.forEach((p, idx) => {
+                const meta = ITC_CODE_META[p.code] || { emoji: '•' };
+                html += `<circle cx="${p.x}" cy="${p.y}" r="5" fill="#fff" stroke="#2563eb" stroke-width="2"/>`;
+                html += `<text x="${p.x}" y="${p.y - 10}" text-anchor="middle" font-size="10">${meta.emoji}</text>`;
+            });
+            return `<div class="pr-chart-card"><div class="pr-chart-title">行為時序圖</div><svg viewBox="0 0 ${w} ${h}" class="pr-svg">${html}</svg></div>`;
+        }
+
+        function buildClassTimelineSvg(data) {
+            const points = Array.isArray(data && data.timeline) ? data.timeline : [];
+            if (!points.length) return '<div class="pr-note">目前沒有全班行為時序圖資料。</div>';
+            const timelineMeta = (data && data.timelineMeta) || {};
+            const startTs = Number(timelineMeta.startTs || 0);
+            const endTs = Number(timelineMeta.endTs || 0);
+            const xMaxMin = Math.max(1, endTs > startTs ? Number((((endTs - startTs) / 60000)).toFixed(2)) : 1);
+            const grouped = new Map();
+            points.forEach(point => {
+                const minute = Number(point && point.minute || 0);
+                const key = minute.toFixed(2);
+                const score = Number(ITC_DIAG_SCORE_MAP[String(point && point.code || '')] || 0);
+                if (!grouped.has(key)) grouped.set(key, { minute, total: 0, count: 0 });
+                const row = grouped.get(key);
+                row.total += score;
+                row.count += 1;
+            });
+            const series = Array.from(grouped.values())
+                .map(row => ({ minute: row.minute, score: row.count ? (row.total / row.count) : 0 }))
+                .sort((a, b) => a.minute - b.minute);
+            if (!series.length) return '<div class="pr-note">目前沒有全班行為時序圖資料。</div>';
+            const w = 620;
+            const h = 150;
+            const m = { left: 42, right: 12, top: 12, bottom: 18 };
+            const innerW = w - m.left - m.right;
+            const innerH = h - m.top - m.bottom;
+            const x = min => m.left + (Math.max(0, Math.min(xMaxMin, min)) / xMaxMin) * innerW;
+            const y = score => m.top + ((1 - Math.max(0, Math.min(1, score))) * innerH);
+            let html = '';
+            [0, 0.25, 0.5, 0.75, 1].forEach(score => {
+                const yy = y(score);
+                html += `<line x1="${m.left}" y1="${yy}" x2="${w - m.right}" y2="${yy}" stroke="#e2e8f0" stroke-width="1"/>`;
+                html += `<text x="${m.left - 8}" y="${yy + 4}" font-size="10" fill="#64748b" text-anchor="end">${Math.round(score * 100)}</text>`;
+            });
+            const coords = series.map(point => ({ x: x(point.minute), y: y(point.score) }));
+            html += `<polyline points="${coords.map(p => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="#7c3aed" stroke-width="2.4"/>`;
+            coords.forEach(p => {
+                html += `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#fff" stroke="#7c3aed" stroke-width="2"/>`;
+            });
+            html += `<text x="${w - m.right}" y="${m.top + 2}" font-size="11" fill="#7c3aed" text-anchor="end" font-weight="700">全班平均行為分數</text>`;
+            return `<div class="pr-chart-card"><div class="pr-chart-title">全班行為時序圖</div><svg viewBox="0 0 ${w} ${h}" class="pr-svg">${html}</svg></div>`;
+        }
+
+        function buildPersonalCardsHtml(data, analyticsRow, seatNo) {
+            if (!analyticsRow) return '<div class="pr-note">目前沒有個人診斷卡片資料。</div>';
+            const seatPoints = Array.isArray(data && data.timeline) ? data.timeline.filter(p => Number(p && p.seatNo || 0) === Number(seatNo || 0)) : [];
+            const offPoints = seatPoints.filter(p => String(p.code || '') === 'OFF_TASK');
+            const peakMinute = offPoints.length ? Math.floor(Math.max(...offPoints.map(p => Number(p.minute || 0)))) : null;
+            const helpCount = Number(analyticsRow.helpCount || 0);
+            const latencyText = analyticsRow.latencySec == null ? '--' : formatDurationSmart(analyticsRow.latencySec);
+            const cards = [
+                { title: '任務啟動效率', value: latencyText, sub: '到第一個主動在工' },
+                { title: '今日求助次數', value: `${helpCount} 次`, sub: '只顯示自己' },
+                { title: '離題高峰', value: peakMinute == null ? '--' : `第 ${peakMinute} 分`, sub: '只顯示自己' },
+                { title: 'ITC 分數', value: analyticsRow.itcScore == null ? '--' : Number(analyticsRow.itcScore || 0).toFixed(1), sub: '個人任務穩定度' }
+            ];
+            return `<div class="pr-cards">${cards.map(card => `<div class="pr-card"><div class="pr-card-title">${card.title}</div><div class="pr-card-value">${card.value}</div><div class="pr-card-sub">${card.sub}</div></div>`).join('')}</div>`;
+        }
+
+        function buildPersonalReportSectionHtml(seat, analyticsRow, selectedOptions, photoCountMap) {
+            const parts = [];
+            const seatNo = Number(seat.seatNo || 0);
+            const todayPhotoCount = Number((photoCountMap && photoCountMap[seatNo]) || 0);
+            const latestLight = String(seat.lightStatus || 'NONE');
+            const latestScore = seat.latestAiScore === null || seat.latestAiScore === undefined || seat.latestAiScore === '' ? '--' : seat.latestAiScore;
+            const aiSuggestion = String(seat.latestAiSuggestion || '').trim();
+            const reportLine = analyticsRow && analyticsRow.diagnosis ? String(analyticsRow.diagnosis.reportLine || '') : '';
+            const classDiagnosisLabel = itcAnalyticsCache && itcAnalyticsCache.seatAnalytics && itcAnalyticsCache.seatAnalytics.classDiagnosis
+                ? String(itcAnalyticsCache.seatAnalytics.classDiagnosis.label || '')
+                : '';
+            const derived = itcAnalyticsCache ? getItcDiagnosticAnalytics(itcAnalyticsCache) : null;
+
+            if (selectedOptions.includes('basic')) {
+                parts.push(`<section class="pr-section"><h3>基本資料</h3><div class="pr-grid">
+                    <div><strong>活動：</strong>${currentActivity.activityName || ''}</div>
+                    <div><strong>座號：</strong>${seatNo}</div>
+                    <div><strong>人數：</strong>${Number(currentActivity.studentCount || 0)} 人</div>
+                    <div><strong>匯出日期：</strong>${new Date().toLocaleDateString('zh-TW')}</div>
+                </div></section>`);
+            }
+            if (selectedOptions.includes('lights')) {
+                parts.push(`<section class="pr-section"><h3>燈號與拍照摘要</h3><div class="pr-grid">
+                    <div><strong>目前燈號：</strong>${latestLight}</div>
+                    <div><strong>今日拍照次數：</strong>${todayPhotoCount} 次</div>
+                    <div><strong>今日 ITC 次數：</strong>${Number(getSeatTodayItcCount(seat) || 0)} 次</div>
+                    <div><strong>分數：</strong>${latestScore}</div>
+                </div></section>`);
+            }
+            if (selectedOptions.includes('itc')) {
+                const counts = analyticsRow && analyticsRow.counts ? analyticsRow.counts : parseItcCountsJsonSafe(seat.itcCountsJson);
+                const items = ['ON_ACTIVE', 'ON_PASSIVE', 'SEEK_HELP', 'UNCLEAR', 'OFF_TASK', 'DISRUPTIVE']
+                    .map(code => {
+                        const meta = ITC_CODE_META[code] || { emoji: '', label: code };
+                        return `<div><strong>${meta.emoji} ${meta.label}</strong>：${Number((counts && counts[code]) || 0)} 次</div>`;
+                    }).join('');
+                parts.push(`<section class="pr-section"><h3>ITC 六類統計</h3><div class="pr-list">${items}</div></section>`);
+            }
+            if (selectedOptions.includes('engagement')) {
+                const aet = analyticsRow ? Number(analyticsRow.aetRate || 0).toFixed(1) : '--';
+                const pet = analyticsRow ? Number(analyticsRow.petRate || 0).toFixed(1) : '--';
+                const oft = analyticsRow ? Number(analyticsRow.oftRate || 0).toFixed(1) : '--';
+                const peer = analyticsRow && analyticsRow.peerComparison && analyticsRow.peerComparison.aetRate
+                    ? analyticsRow.peerComparison.aetRate
+                    : {};
+                const compareLine = analyticsRow
+                    ? `AET ${aet}% / PET ${pet}% / OFT ${oft}%；同班其他同學平均 AET ${peer.peerAvg == null ? '--' : Number(peer.peerAvg || 0).toFixed(1) + '%'}`
+                    : '目前尚未建立 ITC 比較資料。';
+                parts.push(`<section class="pr-section pr-highlight-section"><h3>參與度與比較</h3>${buildPersonalEngagementHtml(analyticsRow)}<div class="pr-paragraph">${compareLine}</div>${reportLine ? `<div class="pr-note">${reportLine}</div>` : ''}</section>`);
+            }
+            if (selectedOptions.includes('cards')) {
+                parts.push(`<section class="pr-section"><h3>ITC 紀錄</h3>${itcAnalyticsCache ? buildPersonalCardsHtml(itcAnalyticsCache, analyticsRow, seatNo) : '<div class="pr-note">目前沒有個人 ITC 紀錄資料。</div>'}</section>`);
+            }
+            if (selectedOptions.includes('charts')) {
+                parts.push(`<section class="pr-section"><h3>ITC 圖表區</h3>
+                    <div class="pr-chart-grid">
+                        ${buildPersonalRadarSvg(analyticsRow, derived)}
+                        ${buildPersonalQuadrantSvg(analyticsRow, derived)}
+                    </div>
+                    <div class="pr-chart-grid pr-chart-grid-single">
+                        ${itcAnalyticsCache ? buildPersonalHeatmapHtml(itcAnalyticsCache, seatNo) : '<div class="pr-note">目前沒有熱力圖資料。</div>'}
+                        ${itcAnalyticsCache ? buildPersonalTimelineSvg(itcAnalyticsCache, seatNo) : '<div class="pr-note">目前沒有行為時序圖資料。</div>'}
+                    </div>
+                </section>`);
+            }
+            if (selectedOptions.includes('classTimeline')) {
+                parts.push(`<section class="pr-section"><h3>全班行為時序圖</h3>${itcAnalyticsCache ? buildClassTimelineSvg(itcAnalyticsCache) : '<div class="pr-note">目前沒有全班行為時序圖資料。</div>'}</section>`);
+            }
+            if (selectedOptions.includes('quality')) {
+                const diagLabel = analyticsRow && analyticsRow.diagnosis ? analyticsRow.diagnosis.label : '尚無診斷資料';
+                const diagReason = analyticsRow && analyticsRow.diagnosis ? analyticsRow.diagnosis.reason : '目前尚未建立學業品質評價資料。';
+                const diagAction = analyticsRow && analyticsRow.diagnosis ? analyticsRow.diagnosis.action : '';
+                parts.push(`<section class="pr-section"><h3>學業品質評價</h3>
+                    <div class="pr-badge">${diagLabel}</div>
+                    <div class="pr-paragraph">${diagReason}</div>
+                    ${diagAction ? `<div class="pr-note">建議：${diagAction}</div>` : ''}
+                    ${classDiagnosisLabel ? `<div class="pr-note">班級整體判讀：${classDiagnosisLabel}</div>` : ''}
+                </section>`);
+            }
+            if (selectedOptions.includes('ai')) {
+                parts.push(`<section class="pr-section"><h3>建議</h3><div class="pr-paragraph">${aiSuggestion || '目前沒有建議內容。'}</div></section>`);
+            }
+            return parts.join('');
+        }
+
+        function exportPersonalReports() {
+            const selectedSeats = Array.from(document.querySelectorAll('.personal-report-seat:checked')).map(node => Number(node.value || 0)).filter(Boolean);
+            const selectedOptions = getPersonalReportSelectedOptions();
+            if (!selectedSeats.length) {
+                alert('請先勾選至少一位學生。');
+                return;
+            }
+            if (!selectedOptions.length) {
+                alert('請先勾選至少一項報告內容。');
+                return;
+            }
+
+            const analyticsMap = getPersonalReportSeatAnalyticsMap();
+            const photoCountMap = buildTodayPhotoCountMap(activitySubmissionsCache);
+            const selectedSeatData = currentSeatData
+                .filter(seat => selectedSeats.includes(Number(seat.seatNo || 0)))
+                .sort((a, b) => Number(a.seatNo || 0) - Number(b.seatNo || 0));
+
+            const pagesHtml = selectedSeatData.map(seat => {
+                const seatNo = Number(seat.seatNo || 0);
+                const analyticsRow = analyticsMap[seatNo] || null;
+                return `<article class="report-page">
+                    <header class="report-header">
+                        <div>
+                            <div class="report-title">${currentActivity.activityName || '活動個人報告'}</div>
+                            <div class="report-subtitle">座號 ${seatNo} 個人報告</div>
+                        </div>
+                        <div class="report-meta">活動代碼：${currentActivityCode || '--'}</div>
+                    </header>
+                    ${buildPersonalReportSectionHtml(seat, analyticsRow, selectedOptions, photoCountMap)}
+                </article>`;
+            }).join('');
+
+            const printWin = window.open('', '_blank', 'width=1100,height=900');
+            if (!printWin) {
+                alert('瀏覽器阻擋了列印視窗，請允許彈出視窗後再試一次。');
+                return;
+            }
+            printWin.document.write(`<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>個人報告列印版</title>
+<style>
+@page{size:A4 portrait;margin:10mm}
+body{font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px}
+.report-toolbar{position:sticky;top:0;z-index:20;display:flex;justify-content:center;gap:12px;margin:0 auto 20px auto;padding:12px 16px;max-width:720px;background:rgba(248,250,252,.92);backdrop-filter:blur(10px)}
+.report-print-btn{border:none;border-radius:999px;padding:12px 18px;background:#2563eb;color:#fff;font-size:14px;font-weight:900;cursor:pointer;box-shadow:0 8px 18px rgba(37,99,235,.24)}
+.report-print-btn:hover{background:#1d4ed8}
+.report-print-btn{font-size:0;line-height:1}
+.report-print-btn::before{content:"列印報告";font-size:14px;line-height:1}
+.report-page{width:190mm;min-height:277mm;box-sizing:border-box;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:12mm 10mm;margin:0 auto 24px auto;box-shadow:0 8px 24px rgba(15,23,42,.06);page-break-after:always}
+.report-page:last-child{page-break-after:auto}
+.report-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #e2e8f0;padding-bottom:14px;margin-bottom:18px}
+.report-title{font-size:24px;font-weight:900}
+.report-subtitle{font-size:14px;color:#475569;margin-top:4px}
+.report-meta{font-size:12px;color:#64748b;font-weight:700}
+.pr-section{margin-bottom:16px;break-inside:avoid-page;page-break-inside:avoid}
+.pr-section h3{margin:0 0 8px 0;font-size:15px;font-weight:900;color:#1e293b}
+.pr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;font-size:13px}
+.pr-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;font-size:13px}
+.pr-paragraph,.pr-note{font-size:13px;line-height:1.8}
+.pr-note{margin-top:8px;color:#475569}
+.pr-badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:900;margin-bottom:8px}
+.pr-highlight-section{border:1px solid #bfdbfe;background:#eff6ff;border-radius:14px;padding:12px 14px}
+.pr-engagement{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;margin-bottom:10px}
+.pr-donut-wrap{position:relative;width:108px;height:108px}
+.pr-donut{width:108px;height:108px;border-radius:999px}
+.pr-donut-hole{position:absolute;inset:24px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#475569;border:1px solid #e2e8f0}
+.pr-engagement-meta{font-size:13px;line-height:1.8}
+.pr-chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;max-width:100%;break-inside:avoid-page;page-break-inside:avoid}
+.pr-chart-grid>*{min-width:0}
+.pr-chart-grid-single{grid-template-columns:1fr}
+.pr-chart-card{box-sizing:border-box;width:100%;min-width:0;max-width:100%;overflow:hidden;border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff;break-inside:avoid-page;page-break-inside:avoid}
+.pr-chart-title{font-size:13px;font-weight:900;color:#334155;margin-bottom:8px}
+.pr-svg{box-sizing:border-box;width:100%;max-width:100%;height:auto;display:block;overflow:hidden;break-inside:avoid-page;page-break-inside:avoid}
+.pr-heat-grid{box-sizing:border-box;width:100%;max-width:100%;min-width:0;display:grid;gap:2px;align-items:center;overflow:hidden;break-inside:avoid-page;page-break-inside:avoid}
+.pr-heat-cell{box-sizing:border-box;min-width:0;overflow:hidden;border-radius:4px;padding:4px 0;text-align:center;font-size:8px;font-weight:800;white-space:nowrap;border:1px solid rgba(148,163,184,.16)}
+.pr-heat-head{background:#f8fafc;color:#64748b}
+.pr-heat-label{font-size:11px;font-weight:900;color:#475569;padding:4px 0}
+.pr-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;break-inside:avoid-page;page-break-inside:avoid}
+.pr-card{border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#f8fafc;break-inside:avoid-page;page-break-inside:avoid}
+.pr-card-title{font-size:11px;font-weight:900;color:#64748b}
+.pr-card-value{font-size:20px;font-weight:900;color:#0f172a;margin-top:4px}
+.pr-card-sub{font-size:11px;color:#64748b;margin-top:4px}
+@media print{
+body{background:#fff;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.report-toolbar{display:none !important}
+.report-page{width:190mm;min-height:277mm;box-sizing:border-box;box-shadow:none;border:1px solid #e2e8f0;border-radius:18px;margin:0 auto 0 auto;padding:12mm 10mm;break-after:page;page-break-after:always}
+.report-page:last-child{break-after:auto;page-break-after:auto}
+.report-header,.pr-section,.pr-chart-grid,.pr-chart-card,.pr-svg,.pr-heat-grid,.pr-cards,.pr-card{break-inside:avoid-page;page-break-inside:avoid}
+.pr-engagement{grid-template-columns:104px 1fr;gap:14px}
+.pr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr-chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr-chart-grid.pr-chart-grid-single{grid-template-columns:1fr}
+.pr-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pr-donut-wrap,.pr-donut{width:96px;height:96px}
+.pr-donut-hole{inset:22px}
+.pr-highlight-section{border:1px solid #93c5fd !important;background:#eff6ff !important}
+.pr-chart-card,.pr-card,.pr-donut-hole,.pr-heat-head,.pr-heat-cell{background-clip:padding-box}
+img,svg,.pr-chart-card,.pr-heat-grid{max-width:100%}
+svg,rect,circle,polygon,polyline,text{break-inside:avoid-page;page-break-inside:avoid}
+}
+@media screen and (max-width:800px){
+body{padding:12px}
+.report-toolbar{padding:10px 12px}
+.report-page{width:auto;min-height:auto;padding:16px 14px}
+.pr-engagement,.pr-chart-grid,.pr-grid,.pr-list,.pr-cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="report-toolbar no-print">
+    <button class="report-print-btn" type="button" onclick="window.print()">列印報告</button>
+</div>
+${pagesHtml}
+</body></html>`);
+            printWin.document.close();
+            printWin.focus();
+            closePersonalReportModal();
+        }
+
+</script>

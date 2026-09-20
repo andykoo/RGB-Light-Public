@@ -1,0 +1,572 @@
+<!-- IRS shared UI and client logic -->
+<div id="irsAdminModal" class="fixed right-0 top-0 z-[80] hidden h-full w-full max-w-[430px] overflow-y-auto border-l border-slate-200 bg-white p-5 shadow-2xl">
+  <div class="w-full">
+    <div class="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+      <div><h2 class="text-xl font-black text-slate-800">📊 IRS 即時互動</h2><p class="text-xs text-slate-400">沿用目前活動與座位表</p></div>
+      <button type="button" onclick="closeIrsAdminPanel()" class="btn btn-sm btn-secondary">關閉</button>
+    </div>
+    <div class="mt-3 grid grid-cols-2 gap-2">
+      <button id="irsLiveTabBtn" type="button" onclick="showIrsLiveView()" class="btn bg-purple-600 text-white">即時互動</button>
+      <button id="irsHistoryTabBtn" type="button" onclick="openIrsHistory()" class="btn btn-secondary">🗂 作答紀錄</button>
+    </div>
+    <div id="irsLiveContent">
+    <section class="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+      <div class="mb-3 text-sm font-black text-indigo-800">① 設定題目</div>
+    <div class="grid gap-3">
+      <div><label class="label">題目（輸入後按「儲存／套用修改」）</label><div class="flex items-stretch gap-2"><input id="irsQuestionInput" class="input min-w-0 flex-1" maxlength="200" placeholder="請輸入題目" oninput="markIrsAdminDirty(); previewIrsQuestion()"><button type="button" onclick="startIrsSpeechInput('irsQuestionInput', this)" class="shrink-0 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-sm font-black text-indigo-700 hover:bg-indigo-50" aria-label="使用語音輸入 IRS 題目" aria-pressed="false">🎤 語音輸入</button></div></div>
+      <div><label class="label">作答方式</label><select id="irsResponseType" class="input" onchange="markIrsAdminDirty(); syncIrsAdminTypeUi()"><option value="choice">A／B／C／D</option><option value="text">文字回應</option></select></div>
+    </div>
+    <div id="irsCorrectOptionWrap" class="mt-3"><label class="label">正確答案（可不設定）</label><select id="irsCorrectOption" class="input max-w-[180px]" onchange="markIrsAdminDirty()"><option value="">不設定</option><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+    <div class="mt-3 rounded-xl bg-slate-50 p-3"><div class="text-[10px] font-bold text-slate-400">學生目前看到的題目</div><div id="irsQuestionPreview" class="mt-1 font-black text-slate-800">快速口頭題（請聽老師說明）</div></div>
+    <div class="mt-3 grid grid-cols-2 gap-2">
+      <button type="button" onclick="setIrsQuickOral()" class="btn btn-secondary">🎤 套用快速口頭題</button>
+      <button id="irsBtnSave" type="button" onclick="saveIrsQuestion()" class="btn bg-indigo-600 text-white hover:bg-indigo-700">💾 儲存／套用修改</button>
+    </div>
+    <p class="mt-2 text-xs text-slate-500">「快速口頭題」會填入預設文字；需要改題目時直接輸入，再按右側按鈕儲存。</p>
+    </section>
+    <section class="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+      <div class="mb-1 text-sm font-black text-emerald-800">② 控制作答</div>
+      <p id="irsActionHint" class="mb-3 text-xs text-slate-500">儲存題目後，開始讓學生回答。</p>
+      <button id="irsBtnStart" type="button" onclick="setIrsAction('start')" class="btn w-full bg-emerald-600 py-3 text-white hover:bg-emerald-700">▶ 開始讓學生作答</button>
+      <button id="irsBtnStop" type="button" onclick="setIrsAction('stop')" class="btn hidden w-full bg-rose-600 py-3 text-white hover:bg-rose-700">■ 停止收件</button>
+      <button id="irsBtnPublish" type="button" onclick="setIrsAction('publish')" class="btn hidden w-full bg-amber-500 py-3 text-white hover:bg-amber-600">📣 公布結果給學生</button>
+    </section>
+    <div id="irsAdminStatus" class="mt-3 text-sm font-bold text-slate-500">請先選擇活動</div>
+    <div class="mt-4 flex items-center justify-between"><div class="font-black text-slate-700">③ 即時結果　已作答 <span id="irsAnsweredCount">0</span> / <span id="irsStudentCount">0</span></div><span id="irsStateBadge" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">未出題</span></div>
+    <div id="irsChoiceStats" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"></div>
+    <div id="irsResultChart" class="mt-3 hidden space-y-3 rounded-2xl border border-slate-200 bg-white p-4"></div>
+    <div id="irsTextWordCloud" class="mt-3 hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4"></div>
+    <div id="irsSelectedSeatResponse" class="mt-3 hidden rounded-2xl border-2 border-purple-300 bg-purple-50 p-4"></div>
+    <div id="irsTextResponses" class="mt-3 hidden space-y-2"></div>
+    <div class="mt-5 border-t border-slate-200 pt-4"><button id="irsBtnClear" type="button" onclick="setIrsAction('clear')" class="btn w-full bg-white text-rose-700 border border-rose-200 hover:bg-rose-50">🗑 清除此題並重設</button></div>
+    </div>
+    <div id="irsHistoryContent" class="mt-4 hidden">
+      <div class="mb-3 flex items-center justify-between gap-2"><div><div class="font-black text-slate-800">IRS 作答紀錄</div><div class="text-xs text-slate-400">最近 100 題，來源為 Logs</div></div><button type="button" onclick="exportIrsHistoryCsv()" class="btn btn-sm bg-emerald-600 text-white">匯出 CSV</button></div>
+      <div id="irsHistoryStatus" class="rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-500">按「作答紀錄」載入</div>
+      <div id="irsHistoryList" class="mt-3 space-y-3"></div>
+    </div>
+  </div>
+</div>
+
+<div id="irsWordCloudModal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onclick="if(event.target===this) closeIrsWordCloudModal()">
+  <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-gradient-to-br from-purple-50 via-white to-blue-50 p-5 shadow-2xl sm:p-8">
+    <div class="mb-4 flex items-center justify-between gap-3 border-b border-purple-100 pb-4"><div><h2 class="text-2xl font-black text-purple-900">☁️ 文字回應雲</h2><p class="text-sm text-slate-500">文字越大，代表出現次數越多</p></div><button type="button" onclick="closeIrsWordCloudModal()" class="btn btn-secondary">✕ 關閉</button></div>
+    <div id="irsWordCloudModalBody" class="flex min-h-[55vh] flex-wrap items-center justify-center gap-x-4 gap-y-5 rounded-2xl bg-white/80 p-6"></div>
+  </div>
+</div>
+
+<div id="irsChoiceResultModal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onclick="if(event.target===this) closeIrsChoiceResultModal()">
+  <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+    <div class="mb-5 flex items-center justify-between gap-3 border-b border-slate-200 pb-4"><div><h2 class="text-2xl font-black text-slate-900">📊 A／B／C／D 作答結果</h2><p id="irsChoiceModalPrompt" class="mt-1 text-sm text-slate-500"></p></div><button type="button" onclick="closeIrsChoiceResultModal()" class="btn btn-secondary">✕ 關閉</button></div>
+    <div id="irsChoiceModalCards" class="grid grid-cols-2 gap-4 sm:grid-cols-4"></div>
+    <div id="irsChoiceModalBars" class="mt-6 space-y-4"></div>
+  </div>
+</div>
+
+<section id="irsStudentPanel" class="hidden rounded-2xl border-2 border-purple-300 bg-white p-5 shadow-md">
+  <div class="flex items-start justify-between gap-3"><div><div class="text-xs font-bold text-purple-500">老師正在提問</div><h2 id="irsStudentPrompt" class="mt-1 text-lg font-black text-slate-800"></h2></div><span id="irsStudentStateBadge" class="rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-purple-700">作答中</span></div>
+  <div id="irsStudentChoice" class="mt-4 hidden">
+    <p class="mb-3 text-sm font-bold text-slate-600">請先點選一個答案，再按「送出選項」。</p>
+    <div class="grid grid-cols-2 gap-3">
+      <button type="button" data-irs-option="A" onclick="selectIrsOption('A')" class="irs-answer-btn h-20 rounded-xl bg-red-500 text-2xl font-black text-white">A</button>
+      <button type="button" data-irs-option="B" onclick="selectIrsOption('B')" class="irs-answer-btn h-20 rounded-xl bg-yellow-400 text-2xl font-black text-slate-900">B</button>
+      <button type="button" data-irs-option="C" onclick="selectIrsOption('C')" class="irs-answer-btn h-20 rounded-xl bg-blue-500 text-2xl font-black text-white">C</button>
+      <button type="button" data-irs-option="D" onclick="selectIrsOption('D')" class="irs-answer-btn h-20 rounded-xl bg-green-500 text-2xl font-black text-white">D</button>
+    </div>
+    <button id="irsSubmitChoiceBtn" type="button" onclick="submitIrsStudentAnswer()" class="btn mt-3 flex w-full items-center justify-center gap-2 bg-purple-600 py-3 text-white hover:bg-purple-700"><span class="irs-submit-spinner hidden h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span><span class="irs-submit-label">送出選項</span></button>
+  </div>
+  <div id="irsStudentText" class="mt-4 hidden"><p class="mb-3 text-sm font-bold text-slate-600">請輸入 50 字內的回答，再按「送出文字回應」。</p><div class="flex items-start gap-2"><textarea id="irsStudentTextInput" maxlength="50" rows="3" class="input min-w-0 flex-1" placeholder="請輸入您的回答……" oninput="updateIrsTextCount()"></textarea><button type="button" onclick="startIrsSpeechInput('irsStudentTextInput', this)" class="shrink-0 rounded-xl border border-purple-200 bg-white px-3 py-2 text-sm font-black text-purple-700 hover:bg-purple-50" aria-label="使用語音輸入 IRS 文字回答" aria-pressed="false">🎤 語音輸入</button></div><div class="mt-2 flex items-center justify-between gap-3"><span id="irsTextCount" class="text-xs text-slate-400">0 / 50</span><button id="irsSubmitTextBtn" type="button" onclick="submitIrsStudentAnswer()" class="btn flex items-center justify-center gap-2 bg-purple-600 text-white hover:bg-purple-700"><span class="irs-submit-spinner hidden h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span><span class="irs-submit-label">送出文字回應</span></button></div></div>
+  <div id="irsStudentCompleted" class="mt-4 hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center"><div class="text-3xl">✅</div><div class="mt-2 font-black text-emerald-800">已完成作答</div><div id="irsStudentCompletedAnswer" class="mt-1 text-sm text-emerald-700"></div><div class="mt-2 text-xs text-slate-500">作答區已關閉，請等待老師下一步。</div></div>
+  <div id="irsStudentResultChart" class="mt-4 hidden space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4"></div>
+  <div id="irsStudentStatus" class="mt-3 text-center text-sm font-bold text-slate-500"></div>
+</section>
+
+<script>
+  let irsAdminState = null;
+  let irsStudentState = null;
+  let irsSelectedOption = '';
+  let irsRenderedQuestionId = '';
+  let irsPollTimer = null;
+  let irsSubmitting = false;
+  let irsAdminEditorDirty = false;
+  let irsHistoryData = [];
+
+  let irsHostedSpeechRequest = null;
+  let rgbHostedCameraRequest = null;
+  const RGB_HOSTED_TOOL_ORIGIN = 'https://rgb-production.web.app';
+
+  function createRgbHostedToolNonce() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function startIrsSpeechInput(targetId, button) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const nonce = createRgbHostedToolNonce();
+    const helperUrl = `${RGB_HOSTED_TOOL_ORIGIN}/speech/?nonce=${encodeURIComponent(nonce)}&origin=${encodeURIComponent(window.location.origin)}`;
+    const popup = window.open(helperUrl, `rgbSpeechInput_${nonce}`, 'popup=yes,width=560,height=760,resizable=yes,scrollbars=yes');
+    if (!popup) {
+      alert('瀏覽器阻擋了語音輸入視窗。請允許此網站開啟彈出式視窗後，再按一次語音輸入。');
+      return;
+    }
+    irsHostedSpeechRequest = { nonce, targetId, button, popup };
+    button.textContent = '🎤 語音視窗已開啟';
+    button.setAttribute('aria-pressed', 'true');
+    popup.focus();
+  }
+
+  function startRgbHostedCamera(mode) {
+    const nonce = createRgbHostedToolNonce();
+    const helperUrl = `${RGB_HOSTED_TOOL_ORIGIN}/camera/?nonce=${encodeURIComponent(nonce)}&origin=${encodeURIComponent(window.location.origin)}`;
+    const popup = window.open(helperUrl, `rgbCamera_${nonce}`, 'popup=yes,width=720,height=860,resizable=yes,scrollbars=yes');
+    if (!popup) {
+      alert('瀏覽器阻擋了拍照視窗，將改用系統相機。若要使用即時預覽，請允許此網站開啟彈出式視窗。');
+      return false;
+    }
+    rgbHostedCameraRequest = { nonce, mode: String(mode || ''), popup };
+    popup.focus();
+    return true;
+  }
+
+  window.addEventListener('message', event => {
+    const request = irsHostedSpeechRequest;
+    if (!request || event.origin !== RGB_HOSTED_TOOL_ORIGIN || event.source !== request.popup) return;
+    const data = event.data || {};
+    if (data.nonce !== request.nonce || !String(data.type || '').startsWith('rgb-speech-')) return;
+    if (data.type === 'rgb-speech-result') {
+      const target = document.getElementById(request.targetId);
+      if (!target) {
+        alert('原本的輸入區已關閉，請重新開啟 IRS 面板後再試。');
+      } else {
+        const transcript = String(data.transcript || '').trim();
+        const currentValue = String(target.value || '');
+        const separator = currentValue && transcript && !/\s$/.test(currentValue) ? ' ' : '';
+        const nextValue = currentValue + separator + transcript;
+        const maxLength = Number(target.maxLength || 0);
+        target.value = maxLength > 0 ? nextValue.slice(0, maxLength) : nextValue;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.focus();
+      }
+    }
+    const resultButton = request.button;
+    if (resultButton && resultButton.isConnected) {
+      resultButton.textContent = data.type === 'rgb-speech-result' ? '✅ 語音文字已加入' : '🎤 語音輸入';
+      resultButton.setAttribute('aria-pressed', 'false');
+      if (data.type === 'rgb-speech-result') setTimeout(() => {
+        if (resultButton.isConnected && resultButton.getAttribute('aria-pressed') === 'false') resultButton.textContent = '🎤 語音輸入';
+      }, 1800);
+    }
+    irsHostedSpeechRequest = null;
+  });
+
+  window.addEventListener('message', event => {
+    const request = rgbHostedCameraRequest;
+    if (!request || event.origin !== RGB_HOSTED_TOOL_ORIGIN || event.source !== request.popup) return;
+    const data = event.data || {};
+    if (data.nonce !== request.nonce || !String(data.type || '').startsWith('rgb-camera-')) return;
+    if (data.type === 'rgb-camera-result') {
+      const imageDataUrl = String(data.dataUrl || '');
+      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(imageDataUrl) || imageDataUrl.length > 3000000) {
+        alert('拍照結果格式不正確或檔案過大，請重新拍照。');
+      } else if (request.mode === 'student' && typeof openEditor === 'function') {
+        openEditor(imageDataUrl);
+      } else {
+        alert('找不到原本的照片編輯區，請重新開啟拍照功能。');
+      }
+    }
+    rgbHostedCameraRequest = null;
+  });
+
+  function irsIsAdminPage() { return typeof ROLE !== 'undefined' && ROLE !== 'STUDENT'; }
+  function irsCurrentCode() { return irsIsAdminPage() ? String(currentActivityCode || '') : String(state && state.code || ''); }
+  function irsFailure(err) { const message = err && err.message ? err.message : String(err || 'IRS 操作失敗'); alert(message); }
+
+  function openIrsAdminPanel() {
+    if (!currentActivityCode) { alert('請先選擇活動'); return; }
+    const modal = document.getElementById('irsAdminModal');
+    modal.classList.remove('hidden');
+    const dashboard = document.getElementById('viewDashboard');
+    if (dashboard && window.innerWidth >= 1024) dashboard.style.paddingRight = '430px';
+    showIrsLiveView();
+    refreshIrsAdminState();
+  }
+  function closeIrsAdminPanel() { const modal = document.getElementById('irsAdminModal'); modal.classList.add('hidden'); const dashboard = document.getElementById('viewDashboard'); if (dashboard) dashboard.style.paddingRight = ''; }
+  function showIrsLiveView() {
+    document.getElementById('irsLiveContent').classList.remove('hidden');
+    document.getElementById('irsHistoryContent').classList.add('hidden');
+    document.getElementById('irsLiveTabBtn').className = 'btn bg-purple-600 text-white';
+    document.getElementById('irsHistoryTabBtn').className = 'btn btn-secondary';
+  }
+  function openIrsHistory() {
+    if (!currentActivityCode) { alert('請先選擇活動'); return; }
+    const modal = document.getElementById('irsAdminModal');
+    modal.classList.remove('hidden');
+    const dashboard = document.getElementById('viewDashboard');
+    if (dashboard && window.innerWidth >= 1024) dashboard.style.paddingRight = '430px';
+    document.getElementById('irsLiveContent').classList.add('hidden');
+    document.getElementById('irsHistoryContent').classList.remove('hidden');
+    document.getElementById('irsLiveTabBtn').className = 'btn btn-secondary';
+    document.getElementById('irsHistoryTabBtn').className = 'btn bg-purple-600 text-white';
+    document.getElementById('irsHistoryStatus').classList.remove('hidden');
+    document.getElementById('irsHistoryStatus').textContent = '正在載入作答紀錄…';
+    const success = data => { irsHistoryData = Array.isArray(data) ? data : []; renderIrsHistory(); };
+    const runner = irsAdminRunner(success);
+    if (String(currentActivityCode).startsWith('G-')) runner.adminGuestGetIrsHistory(currentActivityCode); else runner.adminGetIrsHistory(AUTH_TOKEN, currentActivityCode);
+  }
+  function renderIrsHistory() {
+    const status = document.getElementById('irsHistoryStatus');
+    const list = document.getElementById('irsHistoryList');
+    if (!irsHistoryData.length) { status.classList.remove('hidden'); status.textContent = '目前沒有 IRS 作答紀錄'; list.innerHTML = ''; return; }
+    status.classList.add('hidden');
+    const colors = { A: 'bg-red-500', B: 'bg-yellow-400', C: 'bg-blue-500', D: 'bg-green-500' };
+    list.innerHTML = irsHistoryData.map((item, index) => {
+      const total = Math.max(1, Number(item.answeredCount || 0));
+      const time = item.startedAt ? new Date(item.startedAt).toLocaleString('zh-TW') : '時間不明';
+      const rate = item.studentCount ? Math.round(Number(item.answeredCount || 0) * 100 / Number(item.studentCount)) : 0;
+      const stats = item.responseType === 'choice' ? `<button type="button" onclick="event.preventDefault();event.stopPropagation();openIrsHistoryChoiceModal(${index})" class="mb-2 flex w-full items-center justify-between rounded-xl bg-indigo-50 px-3 py-2 text-left font-black text-indigo-800 hover:bg-indigo-100"><span>📊 選項統計圖</span><span class="text-xs">🔍 點擊放大</span></button>` + ['A','B','C','D'].map(key => {
+        const count = Number(item.counts && item.counts[key] || 0); const pct = Math.round(count * 100 / total);
+        return `<div><div class="flex justify-between text-xs"><b>${key}</b><span>${count} 人（${pct}%）</span></div><div class="mt-1 h-3 overflow-hidden rounded-full bg-slate-100"><div class="h-full ${colors[key]}" style="width:${pct}%"></div></div></div>`;
+      }).join('') : buildIrsWordCloudHtml(item.responses || [], true);
+      const rows = (item.responses || []).map(response => {
+        const gradable = item.responseType === 'choice' && Boolean(item.correctOption);
+        const correct = gradable && String(response.answer || '').toUpperCase() === String(item.correctOption || '').toUpperCase();
+        const result = gradable ? (correct ? '<span class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">答對・100 分</span>' : '<span class="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">答錯・0 分</span>') : '';
+        return `<div class="border-t border-slate-100 py-2 text-sm"><b>${Number(response.seatNo)} 號</b><span class="ml-2 break-words">${escapeIrsHtml(response.answer)}</span>${result}<div class="text-[10px] text-slate-400">${response.submittedAt ? new Date(response.submittedAt).toLocaleString('zh-TW') : ''}</div></div>`;
+      }).join('') || '<div class="py-3 text-sm text-slate-400">無人作答</div>';
+      return `<details class="rounded-2xl border border-slate-200 bg-white p-4" ${index === 0 ? 'open' : ''}><summary class="cursor-pointer list-none"><div class="flex items-start justify-between gap-3"><div><div class="font-black text-slate-800">${escapeIrsHtml(item.prompt || '快速口頭題')}</div><div class="mt-1 text-xs text-slate-400">${time}・${item.responseType === 'text' ? '文字回應' : '選擇題'}</div></div><span class="whitespace-nowrap rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">${Number(item.answeredCount || 0)}/${Number(item.studentCount || 0)}（${rate}%）</span></div></summary><div class="mt-4 space-y-2">${stats}<div class="mt-3 font-bold text-slate-600">座號與答案</div>${rows}</div></details>`;
+    }).join('');
+  }
+  function exportIrsHistoryCsv() {
+    if (!irsHistoryData.length) { alert('目前沒有可匯出的 IRS 作答紀錄'); return; }
+    const csvCell = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
+    const lines = [['題目ID','題目','題型','開始時間','座號','作答答案','正確答案','是否答對','分數','送出時間','作答次數']];
+    irsHistoryData.forEach(item => (item.responses || []).forEach(response => {
+      const gradable = item.responseType === 'choice' && Boolean(item.correctOption);
+      const correct = gradable && String(response.answer || '').toUpperCase() === String(item.correctOption || '').toUpperCase();
+      lines.push([item.questionId,item.prompt,item.responseType === 'text' ? '文字回應' : '選擇題',item.startedAt ? new Date(item.startedAt).toLocaleString('zh-TW') : '',response.seatNo,response.answer,item.correctOption || '',gradable ? (correct ? '是' : '否') : (item.responseType === 'text' ? '不適用' : '未設定正確答案'),gradable ? (correct ? 100 : 0) : '',response.submittedAt ? new Date(response.submittedAt).toLocaleString('zh-TW') : '',response.attemptNo || 1]);
+    }));
+    const blob = new Blob(['\uFEFF' + lines.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `IRS_${String(currentActivityCode || '')}_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(link); link.click(); URL.revokeObjectURL(link.href); link.remove();
+  }
+  function previewIrsQuestion() { document.getElementById('irsQuestionPreview').textContent = document.getElementById('irsQuestionInput').value.trim() || '快速口頭題（請聽老師說明）'; }
+  function markIrsAdminDirty() { irsAdminEditorDirty = true; document.getElementById('irsAdminStatus').textContent = '有尚未儲存的修改'; }
+  function setIrsQuickOral() { document.getElementById('irsQuestionInput').value = '快速口頭題（請聽老師說明）'; markIrsAdminDirty(); previewIrsQuestion(); document.getElementById('irsAdminStatus').textContent = '已套用快速口頭題，請按「儲存／套用修改」'; }
+  function syncIrsAdminTypeUi() { document.getElementById('irsCorrectOptionWrap').classList.toggle('hidden', document.getElementById('irsResponseType').value === 'text'); }
+  function getIrsQuestionPayload() { return { prompt: document.getElementById('irsQuestionInput').value, responseType: document.getElementById('irsResponseType').value, correctOption: document.getElementById('irsCorrectOption').value }; }
+
+  function irsAdminRunner(success) {
+    return google.script.run.withSuccessHandler(success).withFailureHandler(irsFailure);
+  }
+  function refreshIrsAdminState() {
+    if (!irsIsAdminPage() || !currentActivityCode) return;
+    const success = data => { irsAdminState = data || {}; renderIrsAdminState(); decorateAllIrsSeats(); };
+    const runner = irsAdminRunner(success);
+    if (String(currentActivityCode).startsWith('G-')) runner.adminGuestGetIrsState(currentActivityCode); else runner.adminGetIrsState(AUTH_TOKEN, currentActivityCode);
+  }
+  function saveIrsQuestion() {
+    const payload = getIrsQuestionPayload();
+    const success = data => { irsAdminEditorDirty = false; irsAdminState = data; renderIrsAdminState(); document.getElementById('irsAdminStatus').textContent = '題目已儲存；後續修改後請再次儲存'; };
+    const runner = irsAdminRunner(success);
+    if (String(currentActivityCode).startsWith('G-')) runner.adminGuestSaveIrsQuestion(currentActivityCode, payload); else runner.adminSaveIrsQuestion(AUTH_TOKEN, currentActivityCode, payload);
+  }
+  function setIrsAction(action) {
+    if (action === 'clear' && !confirm('確定要清除目前題目與所有作答結果嗎？')) return;
+    const runAction = () => {
+      const success = data => { if (action === 'clear') irsAdminEditorDirty = false; irsAdminState = data; renderIrsAdminState(); decorateAllIrsSeats(); };
+      const runner = irsAdminRunner(success);
+      if (String(currentActivityCode).startsWith('G-')) runner.adminGuestSetIrsStatus(currentActivityCode, action); else runner.adminSetIrsStatus(AUTH_TOKEN, currentActivityCode, action);
+    };
+    if (action === 'start') {
+      const payload = getIrsQuestionPayload();
+      const runner = irsAdminRunner(data => { irsAdminEditorDirty = false; irsAdminState = data; runAction(); });
+      if (String(currentActivityCode).startsWith('G-')) runner.adminGuestSaveIrsQuestion(currentActivityCode, payload); else runner.adminSaveIrsQuestion(AUTH_TOKEN, currentActivityCode, payload);
+      return;
+    }
+    runAction();
+  }
+  function renderIrsAdminState() {
+    const data = irsAdminState || {};
+    if (!irsAdminEditorDirty) {
+      document.getElementById('irsQuestionInput').value = data.prompt || '快速口頭題（請聽老師說明）';
+      document.getElementById('irsResponseType').value = data.responseType || 'choice';
+      document.getElementById('irsCorrectOption').value = data.correctOption || '';
+      previewIrsQuestion(); syncIrsAdminTypeUi();
+    }
+    document.getElementById('irsAnsweredCount').textContent = Number(data.answeredCount || 0);
+    document.getElementById('irsStudentCount').textContent = Number(data.studentCount || 0);
+    const labels = { idle: '未出題', draft: '草稿', active: '作答中', stopped: '已停止', published: '已公布' };
+    document.getElementById('irsStateBadge').textContent = labels[data.status] || '未出題';
+    const status = data.status || 'idle';
+    document.getElementById('irsBtnStart').classList.toggle('hidden', status === 'active' || status === 'stopped');
+    document.getElementById('irsBtnStop').classList.toggle('hidden', status !== 'active');
+    document.getElementById('irsBtnPublish').classList.toggle('hidden', status !== 'stopped');
+    document.getElementById('irsBtnClear').classList.toggle('hidden', status === 'idle');
+    document.getElementById('irsBtnSave').textContent = '💾 儲存／套用修改';
+    const hints = { idle: '先設定題目，再開始讓學生作答。', draft: '題目已儲存，按下方按鈕開始收件。', active: '學生正在作答；完成後請停止收件。', stopped: '已停止收件，現在可以公布結果。', published: '結果已公布；可修改題目後開始新一輪。' };
+    document.getElementById('irsActionHint').textContent = hints[status] || '';
+    document.getElementById('irsAdminStatus').textContent = irsAdminEditorDirty ? '有尚未儲存的修改' : (data.prompt ? `目前題目：${data.prompt}` : '尚未建立題目');
+    const counts = data.counts || {};
+    const choiceCardStyles = {
+      A: 'background:#ef4444;color:#fff;border-color:#dc2626',
+      B: 'background:#facc15;color:#0f172a;border-color:#eab308',
+      C: 'background:#3b82f6;color:#fff;border-color:#2563eb',
+      D: 'background:#22c55e;color:#fff;border-color:#16a34a'
+    };
+    const choiceStats = document.getElementById('irsChoiceStats');
+    choiceStats.innerHTML = ['A','B','C','D'].map(key => `<div class="rounded-xl border p-3 text-center shadow-sm" style="${choiceCardStyles[key]}"><div class="text-2xl font-black">${key}</div><div class="text-sm font-bold opacity-90">${Number(counts[key] || 0)} 人</div></div>`).join('');
+    choiceStats.onclick = data.responseType === 'choice' ? () => openIrsChoiceResultModal(data) : null;
+    choiceStats.classList.toggle('cursor-zoom-in', data.responseType === 'choice');
+    choiceStats.title = data.responseType === 'choice' ? '點擊放大 A／B／C／D 作答結果' : '';
+    renderIrsResultChart(data, counts);
+    renderIrsTextWordCloud(data);
+    const textWrap = document.getElementById('irsTextResponses');
+    const isText = data.responseType === 'text';
+    document.getElementById('irsChoiceStats').classList.toggle('hidden', isText);
+    textWrap.classList.toggle('hidden', !isText);
+    textWrap.innerHTML = (data.responses || []).map(item => `<div class="rounded-lg border border-slate-200 px-3 py-2 text-sm"><b>${Number(item.seatNo)} 號</b>　${escapeIrsHtml(item.answer)}</div>`).join('') || '<div class="text-sm text-slate-400">尚無文字回應</div>';
+  }
+  function escapeIrsHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+  function renderIrsResultChart(data, counts) {
+    const chart = document.getElementById('irsResultChart');
+    const show = data.status === 'published';
+    chart.classList.toggle('hidden', !show);
+    if (!show) { chart.innerHTML = ''; return; }
+    if (data.responseType === 'text') {
+      const answered = Number(data.answeredCount || 0);
+      const total = Number(data.studentCount || 0);
+      const pct = total ? Math.round(answered * 100 / total) : 0;
+      chart.innerHTML = `<div class="font-black text-slate-700">📊 文字回應統計</div><div class="flex justify-between text-sm"><span>已回應 ${answered} 人</span><b>${pct}%</b></div><div class="h-5 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-purple-500 transition-all" style="width:${pct}%"></div></div>`;
+      return;
+    }
+    const total = Math.max(1, Number(data.answeredCount || 0));
+    const styles = { A: ['bg-red-500','text-red-700'], B: ['bg-yellow-400','text-yellow-700'], C: ['bg-blue-500','text-blue-700'], D: ['bg-green-500','text-green-700'] };
+    chart.innerHTML = `<div class="font-black text-slate-700">📊 選項統計圖</div>` + ['A','B','C','D'].map(key => {
+      const count = Number(counts[key] || 0);
+      const pct = Math.round(count * 100 / total);
+      return `<div><div class="mb-1 flex justify-between text-sm font-bold ${styles[key][1]}"><span>${key}</span><span>${count} 人（${pct}%）</span></div><div class="h-6 overflow-hidden rounded-full bg-slate-100"><div class="h-full ${styles[key][0]} transition-all" style="width:${pct}%"></div></div></div>`;
+    }).join('');
+  }
+  function openIrsHistoryChoiceModal(index) { const item = irsHistoryData[Number(index)]; if (item) openIrsChoiceResultModal(item); }
+  function openIrsChoiceResultModal(data) {
+    const item = data || irsAdminState;
+    if (!item || item.responseType !== 'choice') return;
+    const counts = item.counts || {};
+    const total = Math.max(1, Number(item.answeredCount || 0));
+    const styles = {
+      A: ['#ef4444','#fff'], B: ['#facc15','#0f172a'], C: ['#3b82f6','#fff'], D: ['#22c55e','#fff']
+    };
+    document.getElementById('irsChoiceModalPrompt').textContent = `${item.prompt || '快速口頭題'}・已作答 ${Number(item.answeredCount || 0)} 人`;
+    document.getElementById('irsChoiceModalCards').innerHTML = ['A','B','C','D'].map(key => `<div class="rounded-3xl p-6 text-center shadow-lg" style="background:${styles[key][0]};color:${styles[key][1]}"><div class="text-6xl font-black">${key}</div><div class="mt-2 text-xl font-bold">${Number(counts[key] || 0)} 人</div></div>`).join('');
+    document.getElementById('irsChoiceModalBars').innerHTML = ['A','B','C','D'].map(key => {
+      const count = Number(counts[key] || 0); const pct = Math.round(count * 100 / total);
+      return `<div><div class="mb-1 flex justify-between text-lg font-black"><span>${key}</span><span>${count} 人（${pct}%）</span></div><div class="h-8 overflow-hidden rounded-full bg-slate-100"><div class="h-full transition-all" style="width:${pct}%;background:${styles[key][0]}"></div></div></div>`;
+    }).join('');
+    const modal = document.getElementById('irsChoiceResultModal'); modal.classList.remove('hidden'); modal.classList.add('flex');
+  }
+  function closeIrsChoiceResultModal() { const modal = document.getElementById('irsChoiceResultModal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  function getIrsWordFrequencies(responses) {
+    const text = (responses || []).map(item => String(item.answer || '')).join(' ');
+    const stopWords = new Set(['的','了','是','我','你','他','她','它','我們','你們','他們','有','在','和','與','也','都','很','就','不','要','會','可以','因為','所以','這個','那個','一個','老師','同學']);
+    let words = [];
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+      const segmenter = new Intl.Segmenter('zh-TW', { granularity: 'word' });
+      words = Array.from(segmenter.segment(text)).filter(item => item.isWordLike).map(item => item.segment);
+    } else {
+      words = text.match(/[\p{Script=Han}]+|[A-Za-z0-9]+/gu) || [];
+    }
+    const counts = {};
+    words.forEach(raw => {
+      const word = String(raw || '').trim().toLowerCase();
+      if (!word || stopWords.has(word) || (/^[a-z0-9]$/i.test(word))) return;
+      counts[word] = Number(counts[word] || 0) + 1;
+    });
+    return Object.keys(counts).map(word => ({ word: word, count: counts[word] })).sort((a, b) => b.count - a.count || a.word.localeCompare(b.word, 'zh-TW')).slice(0, 35);
+  }
+  function buildIrsWordCloudHtml(responses, withTitle) {
+    const items = getIrsWordFrequencies(responses);
+    if (!items.length) return `${withTitle ? '<div class="mb-3 font-black text-purple-800">☁️ 文字回應雲</div>' : ''}<div class="py-4 text-center text-sm text-slate-400">目前沒有足夠文字可產生文字雲</div>`;
+    const max = Math.max.apply(null, items.map(item => item.count));
+    const palette = ['#7c3aed','#2563eb','#db2777','#0891b2','#ea580c','#16a34a'];
+    const words = items.map((item, index) => {
+      const size = 14 + Math.round((item.count / max) * 24);
+      const rotate = index % 7 === 3 ? -4 : (index % 7 === 5 ? 4 : 0);
+      return `<span class="inline-block cursor-default px-2 py-1 font-black leading-none transition-transform hover:scale-110" style="font-size:${size}px;color:${palette[index % palette.length]};transform:rotate(${rotate}deg)" title="出現 ${item.count} 次">${escapeIrsHtml(item.word)}</span>`;
+    }).join('');
+    const title = withTitle ? '<button type="button" onclick="event.preventDefault();event.stopPropagation();openIrsWordCloudModalFrom(this)" class="mb-3 flex w-full items-center justify-between rounded-xl px-2 py-2 text-left font-black text-purple-800 hover:bg-purple-100"><span>☁️ 文字回應雲</span><span class="text-xs font-bold text-purple-600">🔍 點擊放大</span></button>' : '';
+    return `${title}<div class="irs-word-cloud-body flex min-h-[150px] flex-wrap items-center justify-center gap-x-2 gap-y-3 rounded-xl bg-white/70 p-4">${words}</div><div class="mt-2 text-center text-xs text-slate-400">文字越大，代表出現次數越多</div>`;
+  }
+  function openIrsWordCloudModalFrom(button) {
+    const source = button && button.parentElement ? button.parentElement.querySelector('.irs-word-cloud-body') : null;
+    if (!source) return;
+    const body = document.getElementById('irsWordCloudModalBody');
+    body.innerHTML = source.innerHTML;
+    body.querySelectorAll('span').forEach(word => {
+      const size = parseFloat(word.style.fontSize || '16');
+      word.style.fontSize = `${Math.round(size * 1.45)}px`;
+    });
+    const modal = document.getElementById('irsWordCloudModal');
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+  }
+  function closeIrsWordCloudModal() { const modal = document.getElementById('irsWordCloudModal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  function renderIrsTextWordCloud(data) {
+    const cloud = document.getElementById('irsTextWordCloud');
+    const show = data.status === 'published' && data.responseType === 'text';
+    cloud.classList.toggle('hidden', !show);
+    cloud.innerHTML = show ? buildIrsWordCloudHtml(data.responses || [], true) : '';
+  }
+
+  function showIrsSeatResponse(seatNo) {
+    if (!irsAdminState || irsAdminState.responseType !== 'text') return false;
+    const response = (irsAdminState.responses || []).find(item => Number(item.seatNo) === Number(seatNo));
+    if (!response) return false;
+    openIrsAdminPanel();
+    const detail = document.getElementById('irsSelectedSeatResponse');
+    detail.classList.remove('hidden');
+    detail.innerHTML = `<div class="text-xs font-black text-purple-600">${Number(seatNo)} 號的文字回應</div><div class="mt-2 whitespace-pre-wrap break-words text-base font-bold text-slate-800">${escapeIrsHtml(response.answer)}</div>`;
+    detail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return true;
+  }
+
+  function decorateIrsSeat(seatEl, seatNo) {
+    if (!seatEl) return;
+    seatEl.querySelectorAll('.irs-seat-mark,.irs-seat-answer-bg,.irs-seat-answer-badge').forEach(node => node.remove());
+    if (!irsAdminState || !irsAdminState.questionId) return;
+    const response = (irsAdminState.responses || []).find(item => Number(item.seatNo) === Number(seatNo));
+    let colorClass = response ? 'bg-blue-500' : 'bg-slate-300';
+    if (response && irsAdminState.status === 'published' && irsAdminState.responseType === 'choice' && irsAdminState.correctOption) {
+      colorClass = String(response.answer || '') === String(irsAdminState.correctOption) ? 'bg-green-500' : 'bg-red-500';
+    }
+    const mark = document.createElement('div');
+    mark.className = `irs-seat-mark absolute bottom-2 right-2 z-30 h-3 w-3 rounded-full border border-white shadow ${colorClass}`;
+    mark.title = response ? 'IRS 已作答' : 'IRS 尚未作答';
+    seatEl.appendChild(mark);
+    if (response) {
+      const colorMap = { A: 'bg-red-500', B: 'bg-yellow-400', C: 'bg-blue-500', D: 'bg-green-500' };
+      const answer = String(response.answer || '').toUpperCase();
+      const bg = document.createElement('div');
+      bg.className = `irs-seat-answer-bg pointer-events-none absolute inset-0 z-[5] ${irsAdminState.responseType === 'choice' ? (colorMap[answer] || 'bg-purple-500') : 'bg-purple-500'} opacity-35`;
+      seatEl.appendChild(bg);
+      const badge = document.createElement('div');
+      badge.className = 'irs-seat-answer-badge pointer-events-none absolute left-2 top-2 z-30 rounded-full bg-white/95 px-2 py-0.5 text-xs font-black text-slate-800 shadow';
+      badge.textContent = irsAdminState.responseType === 'choice' ? answer : '文字';
+      seatEl.appendChild(badge);
+      if (irsAdminState.responseType === 'text') {
+        seatEl.title = `${Number(seatNo)} 號：點擊查看文字回應與歷史紀錄`;
+      }
+    }
+  }
+  function decorateAllIrsSeats() { if (!irsIsAdminPage()) return; document.querySelectorAll('#seatGrid .seat[data-seat-no]').forEach(el => decorateIrsSeat(el, el.dataset.seatNo)); }
+
+  function refreshIrsStudentState() {
+    if (irsIsAdminPage() || !state || state.step !== 'main' || !state.code || !state.seat) { document.getElementById('irsStudentPanel').classList.add('hidden'); return; }
+    google.script.run.withSuccessHandler(data => { irsStudentState = data || {}; renderIrsStudentState(); }).withFailureHandler(err => { console.warn('IRS state load failed', err); renderIrsStudentLoadError(err); }).studentGetIrsState(state.code, Number(state.seat));
+  }
+  function renderIrsStudentLoadError(err) {
+    const panel = document.getElementById('irsStudentPanel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    document.getElementById('irsStudentPrompt').textContent = 'IRS 題目載入失敗';
+    document.getElementById('irsStudentStateBadge').textContent = '重新連線中';
+    document.getElementById('irsStudentChoice').classList.add('hidden');
+    document.getElementById('irsStudentText').classList.add('hidden');
+    document.getElementById('irsStudentCompleted').classList.add('hidden');
+    document.getElementById('irsStudentResultChart').classList.add('hidden');
+    document.getElementById('irsStudentStatus').textContent = `系統將自動重試：${err && err.message ? err.message : '連線異常'}`;
+  }
+  function renderIrsStudentState() {
+    const data = irsStudentState || {};
+    const panel = document.getElementById('irsStudentPanel');
+    if (!data.questionId || ['idle','draft'].includes(data.status)) { panel.classList.add('hidden'); return; }
+    if (irsRenderedQuestionId !== data.questionId) {
+      irsRenderedQuestionId = data.questionId;
+      irsSelectedOption = '';
+      document.querySelectorAll('[data-irs-option]').forEach(btn => btn.classList.remove('ring-4'));
+      document.getElementById('irsStudentTextInput').value = '';
+      if (data.status === 'active') setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+    panel.classList.remove('hidden');
+    document.getElementById('irsStudentPrompt').textContent = data.prompt || '快速口頭題（請聽老師說明）';
+    const completed = Boolean(data.ownResponse);
+    document.getElementById('irsStudentChoice').classList.toggle('hidden', completed || data.responseType !== 'choice');
+    document.getElementById('irsStudentText').classList.toggle('hidden', completed || data.responseType !== 'text');
+    document.getElementById('irsStudentCompleted').classList.toggle('hidden', !completed);
+    document.getElementById('irsStudentCompletedAnswer').textContent = completed ? `你送出的答案：${data.ownResponse.answer}` : '';
+    renderIrsStudentResultChart(data);
+    const active = data.status === 'active';
+    panel.querySelectorAll('button,textarea').forEach(el => el.disabled = !active || irsSubmitting);
+    const labels = { active: '作答中', stopped: '已停止', published: '已公布' };
+    document.getElementById('irsStudentStateBadge').textContent = labels[data.status] || data.status;
+    if (data.ownResponse) {
+      if (data.responseType === 'choice') { irsSelectedOption = String(data.ownResponse.answer || ''); selectIrsOption(irsSelectedOption, true); }
+      else document.getElementById('irsStudentTextInput').value = String(data.ownResponse.answer || '');
+    }
+    let statusText = data.ownResponse ? `已送出：${data.ownResponse.answer}` : (active ? '請完成作答' : '本題已停止作答');
+    if (data.status === 'published' && data.responseType === 'choice' && data.correctOption) statusText += `；正確答案 ${data.correctOption}${data.isCorrect === true ? '，答對了' : data.isCorrect === false ? '，答錯了' : ''}`;
+    document.getElementById('irsStudentStatus').textContent = statusText;
+    updateIrsTextCount();
+  }
+  function selectIrsOption(option, silent) {
+    if (!option) return;
+    irsSelectedOption = option;
+    document.querySelectorAll('[data-irs-option]').forEach(btn => btn.classList.toggle('ring-4', btn.dataset.irsOption === option));
+    if (!silent) document.getElementById('irsStudentStatus').textContent = `已選擇 ${option}，尚未送出`;
+  }
+  function renderIrsStudentResultChart(data) {
+    const chart = document.getElementById('irsStudentResultChart');
+    const show = data.status === 'published' && data.responseType === 'choice' && data.counts;
+    chart.classList.toggle('hidden', !show);
+    if (!show) { chart.innerHTML = ''; return; }
+    const total = Math.max(1, Number(data.answeredCount || 0));
+    const colors = { A: 'bg-red-500', B: 'bg-yellow-400', C: 'bg-blue-500', D: 'bg-green-500' };
+    chart.innerHTML = `<div class="mb-2 font-black text-slate-700">📊 全班作答結果</div>` + ['A','B','C','D'].map(key => {
+      const count = Number(data.counts[key] || 0);
+      const pct = Math.round(count * 100 / total);
+      return `<div><div class="flex justify-between text-xs font-bold"><span>${key}</span><span>${count} 人（${pct}%）</span></div><div class="mt-1 h-4 overflow-hidden rounded-full bg-white"><div class="h-full ${colors[key]}" style="width:${pct}%"></div></div></div>`;
+    }).join('');
+  }
+  function updateIrsTextCount() { const input = document.getElementById('irsStudentTextInput'); document.getElementById('irsTextCount').textContent = `${input.value.length} / 50`; }
+  function submitIrsStudentAnswer() {
+    const answer = irsStudentState && irsStudentState.responseType === 'text' ? document.getElementById('irsStudentTextInput').value : irsSelectedOption;
+    if (!irsStudentState || irsStudentState.status !== 'active') { document.getElementById('irsStudentStatus').textContent = '老師目前尚未開放作答'; return; }
+    if (irsStudentState.responseType === 'choice' && !answer) { document.getElementById('irsStudentStatus').textContent = '請先選擇 A、B、C 或 D'; return; }
+    if (irsStudentState.responseType === 'text' && !String(answer || '').trim()) { document.getElementById('irsStudentStatus').textContent = '請先輸入文字回應'; return; }
+    if (irsSubmitting) return;
+    irsSubmitting = true;
+    setIrsSubmittingUi(true);
+    google.script.run
+      .withSuccessHandler(data => {
+        irsSubmitting = false;
+        irsStudentState = data;
+        setIrsSubmittingUi(false);
+        renderIrsStudentState();
+        document.getElementById('irsStudentStatus').textContent = `✓ 已成功送出：${data.ownResponse ? data.ownResponse.answer : answer}`;
+      })
+      .withFailureHandler(err => {
+        irsSubmitting = false;
+        setIrsSubmittingUi(false);
+        renderIrsStudentState();
+        document.getElementById('irsStudentStatus').textContent = `送出失敗：${err && err.message ? err.message : '請稍後再試'}`;
+      })
+      .studentSubmitIrsResponse(state.code, Number(state.seat), answer);
+  }
+  function setIrsSubmittingUi(loading) {
+    const panel = document.getElementById('irsStudentPanel');
+    panel.querySelectorAll('button,textarea').forEach(el => el.disabled = loading || !(irsStudentState && irsStudentState.status === 'active'));
+    panel.querySelectorAll('.irs-submit-spinner').forEach(el => el.classList.toggle('hidden', !loading));
+    const choiceLabel = document.querySelector('#irsSubmitChoiceBtn .irs-submit-label');
+    const textLabel = document.querySelector('#irsSubmitTextBtn .irs-submit-label');
+    if (choiceLabel) choiceLabel.textContent = loading ? '送出中…' : '送出選項';
+    if (textLabel) textLabel.textContent = loading ? '送出中…' : '送出文字回應';
+    if (loading) document.getElementById('irsStudentStatus').textContent = '正在送出答案，請稍候…';
+  }
+
+  setTimeout(() => {
+    const studentMount = document.getElementById('irsStudentMount');
+    const studentPanel = document.getElementById('irsStudentPanel');
+    if (studentMount && studentPanel) studentMount.appendChild(studentPanel);
+    if (irsPollTimer) clearInterval(irsPollTimer);
+    irsPollTimer = setInterval(() => { if (irsIsAdminPage()) { if (currentActivityCode) refreshIrsAdminState(); } else refreshIrsStudentState(); }, 5000);
+    if (!irsIsAdminPage()) refreshIrsStudentState();
+  }, 0);
+</script>

@@ -1,0 +1,2722 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <title>AI 作品儀錶板 - 管理者</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Include shared styles -->
+    <?!= include('Styles'); ?>
+    <?!= include('Analytics'); ?>
+    <script>
+        // Tailwind config if needed
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // custom colors if needed
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-slate-50 min-h-screen p-4 md:p-8">
+
+    <!-- Login View -->
+    <div id="viewLogin" class="flex flex-col items-center justify-center min-h-[80vh] p-4">
+
+        <!-- Guest Teacher Quick Start -->
+        <div class="card w-full max-w-md p-8 shadow-xl border-t-4 border-emerald-500 bg-emerald-50 mb-8">
+            <h2 class="text-2xl font-black text-emerald-800 mb-2 text-center">🏫 訪客老師快速開局</h2>
+            <p class="text-emerald-700 text-center mb-6 text-xs">免安裝、免註冊，直接使用自己的 AI Key 帶領活動。</p>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="label text-emerald-800">活動名稱</label>
+                    <input type="text" id="guestActivityName" class="input border-emerald-200 focus:ring-emerald-500"
+                        placeholder="例如：三年一班美術課">
+                </div>
+                <div>
+                    <label class="label text-emerald-800">人數 (1-60)</label>
+                    <input type="number" id="guestStudentCount" class="input border-emerald-200 focus:ring-emerald-500"
+                        value="30" min="1" max="60">
+                </div>
+                <div>
+                    <label class="label text-emerald-800">OpenAI / Gemini API Key <span
+                            class="text-red-500 text-xs">*單次使用不留存</span></label>
+                    <input type="password" id="guestApiKey" class="input border-emerald-200 focus:ring-emerald-500"
+                        placeholder="sk-...">
+                </div>
+                <div>
+                    <label class="label text-emerald-800">Google Drive 資料夾 ID <span
+                            class="text-red-500 text-xs">*必須公開全開</span></label>
+                    <input type="text" id="guestFolderId" class="input border-emerald-200 focus:ring-emerald-500"
+                        placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ">
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="startGuestActivity()" id="btnGuestStart"
+                        class="btn bg-emerald-600 hover:bg-emerald-700 text-white w-full flex justify-center items-center">
+                        <span>🚀 立即開局 (暫存您在電腦上)</span>
+                        <svg id="spinGuest" class="animate-spin ml-2 h-4 w-4 text-white hidden"
+                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="relative flex items-center py-2">
+                    <div class="flex-grow border-t border-emerald-200"></div>
+                    <span class="flex-shrink-0 mx-4 text-emerald-600 text-xs font-bold">或者</span>
+                    <div class="flex-grow border-t border-emerald-200"></div>
+                </div>
+
+                <div>
+                    <input type="file" id="guestImportInput" accept=".zip" class="hidden"
+                        onchange="handleGuestImportStart(this)">
+                    <button onclick="document.getElementById('guestImportInput').click()" id="btnGuestImport"
+                        class="btn bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-100 w-full flex justify-center items-center">
+                        <span>📂 匯入備份檔並開局 (.zip)</span>
+                        <svg id="spinGuestImport" class="animate-spin ml-2 h-4 w-4 text-emerald-700 hidden"
+                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                    </button>
+                    <p class="text-xs text-emerald-600 mt-2 text-center">匯入備份檔即可免除所有設定</p>
+                </div>
+                <div class="hidden">
+                    <input type="checkbox" id="editEnableSeatLockLegacy" class="w-5 h-5 text-blue-600 rounded">
+                </div>
+                <div class="hidden">
+                    <input type="checkbox" id="editEnableSeatLockPlaceholder" class="w-5 h-5 text-blue-600 rounded">
+                </div>
+            </div>
+            <p id="guestError" class="text-red-500 text-sm mt-4 text-center hidden"></p>
+        </div>
+
+        <!-- Main Admin Login -->
+        <div class="card w-full max-w-md p-8 shadow-xl">
+            <h1 class="text-3xl font-black text-slate-800 mb-2 text-center">後台管理系統</h1>
+            <p class="text-slate-500 text-center mb-6 text-sm">請輸入帳號密碼登入</p>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="label">帳號</label>
+                    <input type="text" id="loginUsername" class="input" placeholder="admin">
+                </div>
+                <div>
+                    <label class="label">密碼</label>
+                    <input type="password" id="loginPassword" class="input" placeholder="••••••••">
+                </div>
+                <button onclick="doLogin()" id="btnLogin" class="btn btn-primary w-full mt-4">我是系統管理員登入</button>
+            </div>
+
+            <p id="loginError" class="text-red-500 text-sm mt-4 text-center hidden"></p>
+        </div>
+    </div>
+
+    <!-- Change Password Modal (Forced or Voluntary) -->
+    <div id="modalChangePwd"
+        class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <h2 class="text-2xl font-bold mb-2">修改密碼</h2>
+            <p class="text-slate-500 text-sm mb-6">為了安全，請設定新的密碼。</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="label">目前密碼</label>
+                    <input type="password" id="cpOld" class="input">
+                </div>
+                <label class="label">新密碼</label>
+                <input type="password" id="cpNew" class="input">
+            </div>
+            <div>
+                <label class="label">確認新密碼</label>
+                <input type="password" id="cpNewConfirm" class="input">
+                <p class="text-xs text-slate-500 mt-1">需含大寫、小寫、數字及特殊符號，8 碼以上</p>
+            </div>
+            <button onclick="doChangePassword()" class="btn btn-primary w-full">確認修改</button>
+            <button onclick="handleCancelPwd()" class="btn btn-secondary w-full text-xs">取消</button>
+        </div>
+    </div>
+    </div>
+
+    <!-- Dashboard View (Hidden by default) -->
+    <div id="viewDashboard" class="hidden">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">AI 互動燈板儀錶板</h1>
+                <p class="text-xs text-slate-500 font-mono mt-1">
+                    User: <span id="displayUsername">...</span>
+                </p>
+            </div>
+            <div>
+                <a href="<?= ScriptApp.getService().getUrl() ?>?page=student" target="_blank"
+                    class="text-sm font-bold text-blue-600 hover:text-blue-800 mr-4 no-underline bg-blue-50 px-3 py-1 rounded-full border border-blue-200 transition-colors">
+                    開啟學生端
+                </a>
+                <button onclick="openSettingsModal()" class="text-slate-400 hover:text-slate-600 mr-4" title="系統設定">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+                <button onclick="openChangePwdModal()"
+                    class="text-sm text-slate-400 hover:text-slate-600 mr-4">修改密碼</button>
+                <button onclick="logout()" class="text-sm text-slate-400 hover:text-slate-600 underline">登出</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Left: Activity Management -->
+            <div class="lg:col-span-4 space-y-6 flex flex-col">
+                <!-- Create Activity -->
+                <div class="card order-2" id="createActivityCard">
+                    <h2 class="card-title mb-4">建立新活動</h2>
+
+                    <label class="label">活動名稱</label>
+                    <input type="text" id="newActivityName" class="input" placeholder="例如：第 3 單元作品繳交">
+
+                    <div class="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                            <label class="label">班級</label>
+                            <input type="text" id="newClassName" class="input" placeholder="可選">
+                        </div>
+                        <div>
+                            <label class="label">人數 (1-60)</label>
+                            <input type="number" id="newStudentCount" class="input" value="30" min="1" max="60">
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="label mb-2 flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="newIsTimeLimited" class="checkbox"
+                                onchange="toggleTimeInputs('new')">
+                            <span>啟用時間限制</span>
+                        </label>
+
+                        <div id="newTimeParams" class="hidden pl-6 border-l-2 border-slate-200 mt-2 space-y-3">
+                            <div>
+                                <label class="label text-xs">開始時間</label>
+                                <div class="flex gap-2">
+                                    <input type="datetime-local" id="newStartTime" class="input text-sm"
+                                        oninput="updateTimeStatus('new')">
+                                    <button onclick="setNow('new')"
+                                        class="btn btn-mini bg-slate-200 hover:bg-slate-300 text-slate-600 whitespace-nowrap">現在時間</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="label text-xs">有效時數 (小時)</label>
+                                <input type="number" id="newLimitHours" class="input" min="0.5" step="0.5" value="2"
+                                    oninput="updateTimeStatus('new')">
+                            </div>
+                            <div class="pt-2">
+                                <div id="newTimeStatus" class="badge badge-none text-xs w-full py-3">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex items-center">
+                        <input type="checkbox" id="newEnableAI"
+                            class="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                        <label for="newEnableAI" class="ml-2 text-sm font-bold text-slate-700">啟用 AI 自動評分</label>
+                    </div>
+
+                    <div class="mt-3 flex items-center">
+                        <input type="checkbox" id="newEnableSeatLock"
+                            class="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                        <label for="newEnableSeatLock" class="ml-2 text-sm font-bold text-slate-700">Lock selected seats</label>
+                    </div>
+
+                    <div class="mt-6">
+                        <button onclick="createActivity()" id="btnCreate"
+                            class="btn btn-primary w-full flex justify-center items-center">
+                            <span>建立活動</span>
+                            <!-- Spinner -->
+                            <svg id="spinCreate" class="animate-spin ml-2 h-4 w-4 text-white hidden"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4">
+                                </circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Select Activity -->
+                <div class="card bg-slate-800 text-white order-1" id="selectActivityCard">
+                    <div id="selectActivityHeader" class="flex justify-between items-center mb-2">
+                        <h2 class="text-lg font-bold">切換活動</h2>
+                        <button onclick="refreshActivityList()"
+                            class="p-1 hover:bg-white/10 rounded-full transition-colors" title="重新整理清單">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                            </svg>
+                        </button>
+                    </div>
+                    <select id="activitySelect" onchange="loadActivity(this.value)"
+                        class="w-full p-2 rounded text-slate-900 font-bold outline-none mb-4">
+                        <option value="">載入中...</option>
+                    </select>
+
+                    <div id="activityInfo" class="hidden space-y-4 border-t border-slate-700 pt-4 mt-2">
+                        <!-- Basic Info -->
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase font-bold">Activity Code</p>
+                            <div class="flex items-center space-x-2">
+                                <span id="displayCode" onclick="showBigText(this.textContent)" title="點擊放大"
+                                    class="text-2xl font-mono font-black text-yellow-400 tracking-wider cursor-pointer hover:scale-110 transition-transform select-none"></span>
+                                <button onclick="copyCode()"
+                                    class="bg-white/10 hover:bg-white/20 p-1 rounded text-xs">複製</button>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div id="adminConfigActions" class="space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="btnOpenEdit" onclick="openEditModal()"
+                                    class="btn btn-secondary text-xs">修改設定 /
+                                    規準</button>
+                                <button onclick="exportBackup()" class="btn btn-secondary text-xs">匯出備份 (ZIP)</button>
+                            </div>
+                            <div class="grid grid-cols-1 gap-2">
+                                <input type="file" id="importInput" accept=".zip" class="hidden"
+                                    onchange="handleImport(this)">
+                                <button onclick="document.getElementById('importInput').click()"
+                                    class="btn btn-secondary text-xs bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600">匯入備份還原</button>
+                                <button onclick="openPersonalReportModal()" class="btn text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-bold">
+                                    匯出個人報告
+                                </button>
+                                <button onclick="openIrsAdminPanel()" class="btn text-xs bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-bold">
+                                    🎯 IRS 即時互動
+                                </button>
+                                <button onclick="openIrsHistory()" class="btn text-xs bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 font-bold">
+                                    🗂 IRS 作答紀錄
+                                </button>
+                            </div>
+                            <div class="mt-4 border-t border-slate-600 pt-3">
+                                <p class="text-slate-400 text-xs uppercase font-bold mb-2">寄送備份至信箱</p>
+                                <div class="flex gap-2">
+                                    <input type="email" id="backupEmail"
+                                        class="input flex-1 text-xs py-1 text-slate-900" placeholder="輸入收件人信箱">
+                                    <button onclick="sendBackupEmail()" id="btnSendBackup"
+                                        class="btn btn-primary text-xs whitespace-nowrap px-3 flex items-center justify-center">
+                                        <span>✉️ 寄送</span>
+                                        <svg id="spinSendEmail" class="animate-spin ml-2 h-3 w-3 text-white hidden"
+                                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                            </path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase font-bold mb-1">Join Link</p>
+                            <div class="flex items-center space-x-2">
+                                <input type="text" id="joinLink" readonly
+                                    class="bg-black/30 text-xs text-slate-300 w-full p-1 rounded font-mono">
+                                <button onclick="copyLink()"
+                                    class="bg-white/10 hover:bg-white/20 p-1 rounded text-xs px-2">複製</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-2 rounded w-fit mx-auto mt-2 cursor-pointer hover:scale-105 transition-transform"
+                            onclick="showBigQr()">
+                            <img id="qrImg" src="" class="w-24 h-24 object-contain">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Dashboard -->
+            <div class="lg:col-span-8 space-y-2">
+
+                <!-- ITC Quick Panel -->
+                <div class="card" id="itcControlPanel">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <label class="label mb-0">ITC 快捷紀錄</label>
+                            <p class="text-[10px] text-slate-400">先選 ITC 類別，再點座號直接紀錄；免登入活動也可使用</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button id="btnItcEnable" onclick="setItcEnabled(true)"
+                                class="px-3 py-1 rounded-full text-xs font-bold border border-slate-300 bg-white text-slate-600">啟用 ITC</button>
+                            <button id="btnItcDisable" onclick="setItcEnabled(false)"
+                                class="px-3 py-1 rounded-full text-xs font-bold border border-slate-300 bg-white text-slate-600">關閉 ITC</button>
+                            <span id="itcLockedSeatLabel"
+                                class="text-xs font-bold px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700">未鎖定座號</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-3">
+                        <button id="itcBtn_ON_ACTIVE" onclick="setItcCode('ON_ACTIVE')" class="itc-code-btn text-left border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-xl px-3 py-2"><div class="font-black text-sm">🚀 主動在工作中</div><div class="text-[10px] text-slate-500">On-task (Active)</div></button>
+                        <button id="itcBtn_ON_PASSIVE" onclick="setItcCode('ON_PASSIVE')" class="itc-code-btn text-left border border-lime-200 bg-lime-50 hover:bg-lime-100 rounded-xl px-3 py-2"><div class="font-black text-sm">👂 被動在工作中</div><div class="text-[10px] text-slate-500">On-task (Passive)</div></button>
+                        <button id="itcBtn_SEEK_HELP" onclick="setItcCode('SEEK_HELP')" class="itc-code-btn text-left border border-sky-200 bg-sky-50 hover:bg-sky-100 rounded-xl px-3 py-2"><div class="font-black text-sm">🆘 求助</div><div class="text-[10px] text-slate-500">Seeking Help</div></button>
+                        <button id="itcBtn_UNCLEAR" onclick="setItcCode('UNCLEAR')" class="itc-code-btn text-left border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-xl px-3 py-2"><div class="font-black text-sm">❓ 無法判斷</div><div class="text-[10px] text-slate-500">Unclear</div></button>
+                        <button id="itcBtn_OFF_TASK" onclick="setItcCode('OFF_TASK')" class="itc-code-btn text-left border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-xl px-3 py-2"><div class="font-black text-sm">🚧 不在工作中</div><div class="text-[10px] text-slate-500">Off-task</div></button>
+                        <button id="itcBtn_DISRUPTIVE" onclick="setItcCode('DISRUPTIVE')" class="itc-code-btn text-left border border-amber-200 bg-amber-50 hover:bg-amber-100 rounded-xl px-3 py-2"><div class="font-black text-sm">⚠️ 干擾</div><div class="text-[10px] text-slate-500">Disruptive</div></button>
+                    </div>
+                </div>
+
+                <!-- ITC Analytics (opened from seat dashboard toolbar) -->
+                <div class="card hidden" id="itcAnalyticsPanel">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                            <label class="label mb-0">ITC 六類統計</label>
+                            <p class="text-[10px] text-slate-400">依目前活動座位紀錄即時統計</p>
+                        </div>
+                        <button onclick="toggleItcAnalyticsPanel(false)" class="btn btn-xs btn-secondary">關閉</button>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center" id="itcSummaryGrid"></div>
+                </div>
+
+                <!-- Batch Controls (Paint Brush Mode) -->
+                <div class="card" id="batchControlPanel">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <label class="label mb-0">快速燈號畫筆</label>
+                            <p class="text-[10px] text-slate-400">點選顏色後，點擊下方座位可直接上色</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="selectBrush('RED')" id="brushBtn_RED" title="紅燈畫筆"
+                                class="brush-btn w-10 h-10 rounded-full bg-red-600 border-4 border-transparent hover:scale-110 transition-all shadow-sm"></button>
+                            <button onclick="selectBrush('YELLOW')" id="brushBtn_YELLOW" title="黃燈畫筆"
+                                class="brush-btn w-10 h-10 rounded-full bg-yellow-400 border-4 border-transparent hover:scale-110 transition-all shadow-sm"></button>
+                            <button onclick="selectBrush('GREEN')" id="brushBtn_GREEN" title="綠燈畫筆"
+                                class="brush-btn w-10 h-10 rounded-full bg-green-500 border-4 border-transparent hover:scale-110 transition-all shadow-sm"></button>
+                            <button onclick="selectBrush('NONE')" id="brushBtn_NONE" title="清除燈號"
+                                class="brush-btn w-10 h-10 rounded-full bg-slate-200 border-4 border-transparent hover:scale-110 transition-all shadow-sm relative flex items-center justify-center">
+                                <span class="text-slate-400 text-xs font-bold">X</span>
+                            </button>
+                            <div class="w-px h-8 bg-slate-200 mx-2"></div>
+                            <button onclick="selectBrush(null)" id="brushBtn_OFF" title="取消畫筆 (檢視模式)"
+                                class="brush-btn px-3 py-1 rounded-full bg-white border border-slate-300 text-xs text-slate-500 hover:bg-slate-50 transition-all shadow-sm">
+                                取消畫筆
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grid -->
+                <div class="card min-h-[500px]">
+                    <h2 class="card-title flex justify-between items-center mb-4">
+                        <span id="dashboardTitle">儀錶板</span>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-slate-400 font-normal" id="lastUpdated"></span>
+                            <button onclick="refreshDashboard()"
+                                class="btn btn-xs btn-secondary flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                    </path>
+                                </svg>
+                                刷新
+                            </button>
+
+                            <button id="btnToggleItcAnalytics" onclick="toggleItcAnalyticsPanel()"
+                                class="btn btn-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1"
+                                title="顯示或隱藏 ITC 六類統計與分析">
+                                <span>📊</span><span class="hidden sm:inline">ITC 六類統計</span>
+                            </button>
+
+                            <button id="btnOpenIrs" onclick="openIrsAdminPanel()"
+                                class="btn btn-xs bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-1"
+                                title="開啟 IRS 即時互動">
+                                <span>🎯</span><span class="hidden sm:inline">IRS 互動</span>
+                            </button>
+
+                            <button onclick="openIrsHistory()"
+                                class="btn btn-xs bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1"
+                                title="查看 IRS 歷史作答紀錄">
+                                <span>🗂</span><span class="hidden sm:inline">作答紀錄</span>
+                            </button>
+
+
+                            <div class="h-4 w-px bg-slate-300 mx-1"></div>
+                            <button onclick="handleAdminReleaseAll()"
+                                class="btn btn-xs btn-error flex items-center gap-1" title="全選登出所有座號">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                                    </path>
+                                </svg>
+                                全體強制登出
+                            </button>
+                            <div class="h-4 w-px bg-slate-300 mx-1"></div>
+                            <button onclick="handleClearAllHelp()"
+                                class="btn btn-xs btn-warning text-slate-900 flex items-center gap-1"
+                                title="一鍵取消所有請求支援">
+                                <span>🚨</span>
+                                取消全班求救
+                            </button>
+                            <div class="h-4 w-px bg-slate-300 mx-1"></div>
+                            <button onclick="handleClearAllLights()"
+                                class="btn btn-xs bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center gap-1"
+                                title="一鍵清除所有學生的燈號">
+                                <span>💡</span>
+                                清除全體燈號
+                            </button>
+                            <div class="h-4 w-px bg-slate-300 mx-1"></div>
+                            <button onclick="handleClearAllData()"
+                                class="btn btn-xs bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center gap-1"
+                                title="一鍵清除所有學生的資料 (包含照片與分數)">
+                                <span>🗑️</span>
+                                清除全體資料
+                            </button>
+                        </div>
+                    </h2>
+
+                    <div id="seatGrid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                        <!-- Seats generated here -->
+                        <div class="col-span-full py-12 text-center text-slate-400">請先選擇或建立活動</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile / compact-window ITC dock -->
+        <div id="itcMobileDock"
+            class="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-t border-slate-200 px-2 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)] xl:hidden shadow-2xl">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <button id="btnItcEnableMobile" onclick="setItcEnabled(!itcEnabled)"
+                    class="px-2 py-1 rounded-full text-[11px] font-bold border border-slate-300 bg-white text-slate-600">ITC</button>
+                <span id="itcLockedSeatLabelMobile"
+                    class="text-[11px] font-bold px-2 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700">未鎖定</span>
+                <div class="flex items-center gap-1">
+                    <button onclick="toggleMobileItcTools()" title="座位設定" class="w-8 h-8 rounded-full border border-slate-300 bg-white text-xs">⚙️</button>
+                    <button onclick="selectBrush('RED')" title="紅燈畫筆" class="w-8 h-8 rounded-full border border-red-200 bg-red-600"></button>
+                    <button onclick="selectBrush('YELLOW')" title="黃燈畫筆" class="w-8 h-8 rounded-full border border-yellow-200 bg-yellow-400"></button>
+                    <button onclick="selectBrush('GREEN')" title="綠燈畫筆" class="w-8 h-8 rounded-full border border-green-200 bg-green-500"></button>
+                    <button onclick="selectBrush('NONE')" title="清除燈號" class="w-8 h-8 rounded-full border border-slate-300 bg-slate-100 text-xs font-black text-slate-500">X</button>
+                    <button onclick="stepGridZoom(-1)" class="w-8 h-8 rounded-full border border-slate-300 bg-white text-xs font-bold">-</button>
+                    <button onclick="stepGridZoom(1)" class="w-8 h-8 rounded-full border border-slate-300 bg-white text-xs font-bold">+</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-6 gap-1">
+                <button id="itcBtnM_ON_ACTIVE" onclick="setItcCode('ON_ACTIVE')" class="itc-code-btn-mobile h-11 rounded-lg border border-emerald-200 bg-emerald-50 text-xl">🚀</button>
+                <button id="itcBtnM_ON_PASSIVE" onclick="setItcCode('ON_PASSIVE')" class="itc-code-btn-mobile h-11 rounded-lg border border-lime-200 bg-lime-50 text-xl">👂</button>
+                <button id="itcBtnM_SEEK_HELP" onclick="setItcCode('SEEK_HELP')" class="itc-code-btn-mobile h-11 rounded-lg border border-sky-200 bg-sky-50 text-xl">🆘</button>
+                <button id="itcBtnM_UNCLEAR" onclick="setItcCode('UNCLEAR')" class="itc-code-btn-mobile h-11 rounded-lg border border-slate-200 bg-slate-50 text-xl">❓</button>
+                <button id="itcBtnM_OFF_TASK" onclick="setItcCode('OFF_TASK')" class="itc-code-btn-mobile h-11 rounded-lg border border-rose-200 bg-rose-50 text-xl">🚧</button>
+                <button id="itcBtnM_DISRUPTIVE" onclick="setItcCode('DISRUPTIVE')" class="itc-code-btn-mobile h-11 rounded-lg border border-amber-200 bg-amber-50 text-xl">⚠️</button>
+            </div>
+            <div id="mobileItcToolsPanel" class="hidden mt-2 text-[10px] text-slate-500 text-center">
+                紅黃綠按鈕為燈號畫筆；X 清除燈號；−／＋ 調整座位格大小。
+            </div>
+        </div>
+    </div> <!-- End viewDashboard -->
+
+    <!-- Modal -->
+    <div id="detailModal"
+        class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all scale-95 opacity-0 flex flex-col max-h-[90vh]"
+            id="modalContent">
+            <!-- Header -->
+            <div class="bg-slate-100 px-6 py-4 flex justify-between items-center border-b border-slate-200 shrink-0">
+                <div>
+                    <span class="text-sm font-bold text-slate-500 mr-2">目前座位</span>
+                    <span class="text-3xl font-black text-slate-800" id="modalSeatNo">--</span>
+                    <span class="text-xl font-bold text-slate-500 ml-1">號</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="btnResolveHelp" onclick=""
+                        class="hidden btn btn-xs btn-warning text-white">解除警報</button>
+                    <button onclick="handleAdminReleaseSeat()" class="btn btn-xs btn-error text-xs h-8">強制登出</button>
+                    <div id="modalLightBadge" class="badge badge-none scale-125">NONE</div>
+                </div>
+            </div>
+
+            <!-- Body (Scrollable) -->
+            <div class="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+                <!-- Photo -->
+                <div class="relative aspect-video bg-slate-200 rounded-lg overflow-hidden group shrink-0">
+                    <img id="modalPhoto" class="w-full h-full object-cover hidden">
+                    <div id="modalNoPhoto"
+                        class="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">無照片</div>
+                    <a id="modalNewTabDetails" href="#" target="_blank"
+                        class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">在新分頁開啟</a>
+                </div>
+
+                <!-- Teacher Photo Actions -->
+                <div class="rounded-xl border border-purple-100 bg-purple-50 p-3">
+                    <div class="mb-2 flex items-center justify-between gap-2">
+                        <p class="text-xs font-black text-purple-800">老師照片操作</p>
+                        <span id="adminPhotoStatus" class="text-[11px] text-purple-600"></span>
+                    </div>
+                    <input type="file" id="adminCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleAdminPhotoFile(this)">
+                    <input type="file" id="adminPhotoFileInput" accept="image/*" class="hidden" onchange="handleAdminPhotoFile(this)">
+                    <div class="grid grid-cols-3 gap-2">
+                        <button id="adminCameraBtn" type="button" onclick="openAdminCamera()" class="btn btn-sm bg-purple-600 text-white hover:bg-purple-700">📷 拍照</button>
+                        <button id="adminPhotoFileBtn" type="button" onclick="openAdminPhotoFilePicker()" class="btn btn-sm btn-secondary">🖼 選取照片</button>
+                        <button id="adminPhotoDeleteBtn" type="button" onclick="deleteAdminSeatPhoto()" class="btn btn-sm border border-rose-200 bg-white text-rose-700 hover:bg-rose-50">🗑 移除</button>
+                    </div>
+                    <p class="mt-2 text-[10px] text-slate-500">移除只清除目前顯示與 AI 結果，歷史紀錄及 Drive 原檔仍保留。</p>
+                </div>
+
+                <!-- AI Result -->
+                <div id="aiSection" class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">AI 評分</span>
+                        <span id="modalScore" class="font-bold text-slate-800">--</span>
+                    </div>
+                    <p id="modalSuggestion" class="text-sm text-slate-600 leading-relaxed min-h-[3rem]">...</p>
+                </div>
+
+                <!-- Manual Override -->
+                <div id="manualOverride" class="pt-4 border-t border-slate-100">
+                    <p class="text-xs text-center text-slate-400 mb-2">手動修改燈號</p>
+                    <div class="flex justify-center gap-4">
+                        <button onclick="updateSeatLight('RED')"
+                            class="w-12 h-12 rounded-full bg-red-600 hover:scale-110 transition-transform shadow-lg"></button>
+                        <button onclick="updateSeatLight('YELLOW')"
+                            class="w-12 h-12 rounded-full bg-yellow-400 hover:scale-110 transition-transform shadow-lg"></button>
+                        <button onclick="updateSeatLight('GREEN')"
+                            class="w-12 h-12 rounded-full bg-green-600 hover:scale-110 transition-transform shadow-lg"></button>
+                    </div>
+                </div>
+
+                <!-- History Section -->
+                <div class="pt-4 border-t border-slate-100">
+                    <h4 class="text-xs font-bold text-purple-600 mb-2 uppercase tracking-wider">IRS 作答紀錄</h4>
+                    <div id="seatIrsHistoryList" class="max-h-52 overflow-y-auto space-y-2 custom-scrollbar">
+                        <!-- IRS history items loaded here -->
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-slate-100">
+                    <h4 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">作品上傳紀錄 <span id="historyCount"></span></h4>
+                    <div id="historyList" class="space-y-1">
+                        <!-- History items loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end shrink-0">
+                <button onclick="closeModal()" class="btn btn-secondary">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submission history detail -->
+    <div id="historyDetailModal"
+        class="fixed inset-0 bg-black/70 z-[70] hidden flex items-center justify-center p-4 backdrop-blur-sm"
+        onclick="if(event.target === this) closeAdminSubmissionHistory()">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
+            <div class="bg-slate-100 px-4 py-3 flex justify-between items-center border-b border-slate-200 shrink-0">
+                <div>
+                    <p class="text-xs font-bold text-slate-500">作品上傳紀錄</p>
+                    <p id="historyDetailTime" class="text-sm font-bold text-slate-800">--</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="historyDetailScore" class="text-sm font-black text-blue-600">--</span>
+                    <span id="historyDetailLight" class="badge badge-none">NONE</span>
+                </div>
+            </div>
+            <div class="p-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+                <div class="relative min-h-48 bg-slate-200 rounded-xl overflow-hidden flex items-center justify-center">
+                    <img id="historyDetailPhoto" class="max-w-full max-h-[55vh] object-contain hidden" alt="作品圖片">
+                    <div id="historyDetailNoPhoto" class="text-sm text-slate-400">無照片</div>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <p class="text-xs font-bold text-blue-600 mb-2">AI 建議</p>
+                    <div id="historyDetailSuggestion" class="text-sm text-slate-700 leading-relaxed break-words">尚無建議</div>
+                </div>
+            </div>
+            <div class="bg-slate-50 px-4 py-3 border-t flex gap-2 shrink-0">
+                <a id="historyDetailOpenPhoto" href="#" target="_blank" rel="noopener" class="btn btn-primary flex-1 hidden">另開圖片</a>
+                <button type="button" onclick="closeAdminSubmissionHistory()" class="btn btn-secondary flex-1">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal"
+        class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full flex flex-col max-h-[90vh]">
+            <div class="p-6 pb-2 shrink-0">
+                <h3 class="text-xl font-bold">修改活動設定</h3>
+            </div>
+
+            <div class="p-6 pt-2 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+                <div>
+                    <label class="label">活動名稱</label>
+                    <input type="text" id="editActivityName" class="input">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="label">班級</label>
+                        <input type="text" id="editClassName" class="input">
+                    </div>
+                    <div>
+                        <label class="label">人數 (1-60)</label>
+                        <input type="number" id="editStudentCount" class="input" min="1" max="60">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label mb-2 flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" id="editIsTimeLimited" class="checkbox"
+                            onchange="toggleTimeInputs('edit')">
+                        <span>啟用時間限制</span>
+                    </label>
+
+                    <div id="editTimeParams" class="hidden pl-6 border-l-2 border-slate-200 mt-2 space-y-3">
+                        <div>
+                            <label class="label text-xs">開始時間</label>
+                            <div class="flex gap-2">
+                                <input type="datetime-local" id="editStartTime" class="input text-sm"
+                                    oninput="updateTimeStatus('edit')">
+                                <button onclick="setNow('edit')"
+                                    class="btn btn-mini bg-slate-200 hover:bg-slate-300 text-slate-600 whitespace-nowrap">現在時間</button>
+                            </div>
+                        </div>
+                        <div>
+                            <input type="number" id="editLimitHours" class="input" min="0.5" step="0.5" value="2"
+                                oninput="updateTimeStatus('edit')">
+                        </div>
+                        <div class="pt-2">
+                            <div id="editTimeStatus" class="badge badge-none text-xs w-full py-3">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label">AI 評分規準 (Rubric)</label>
+                    <p class="text-xs text-slate-500 mb-1">若填寫，AI 將會嚴格參考此標準進行評分。</p>
+                    <textarea id="editRubric" class="input h-32 text-sm"
+                        placeholder="例如：構圖完整得 30 分、色彩豐富得 30 分..."></textarea>
+                </div>
+
+
+                <div class="flex items-center mt-2">
+                    <input type="checkbox" id="editEnableAI" class="w-5 h-5 text-blue-600 rounded">
+                    <label for="editEnableAI" class="ml-2 text-sm font-bold text-slate-700">啟用 AI</label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 p-6 pt-4 border-t shrink-0">
+                <button onclick="document.getElementById('editModal').classList.add('hidden')"
+                    class="btn btn-secondary">取消</button>
+                <button onclick="saveActivitySettings()" class="btn btn-primary">儲存變更</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Big QR Modal -->
+    <div id="bigQrModal"
+        class="fixed inset-0 bg-black/80 z-[60] hidden flex items-center justify-center p-4 backdrop-blur-sm"
+        onclick="closeBigQr()">
+        <div class="bg-white p-4 rounded-3xl shadow-2xl max-w-lg w-full aspect-square flex items-center justify-center">
+            <img id="bigQrImg" src="" class="w-full h-full object-contain">
+        </div>
+    </div>
+
+    <!-- Big Text Modal -->
+    <div id="bigTextModal"
+        class="fixed inset-0 bg-black/90 z-[70] hidden flex items-center justify-center p-4 backdrop-blur-sm cursor-pointer"
+        onclick="closeBigText()">
+        <div class="text-center">
+            <h2 class="text-white text-2xl mb-4 font-bold opacity-70 tracking-widest uppercase">Activity Code</h2>
+            <div id="bigTextContent"
+                class="text-[15vw] font-black text-yellow-400 font-mono tracking-wider drop-shadow-2xl leading-none select-text">
+                --
+            </div>
+            <p class="text-white/50 mt-8 text-sm">點擊任意處關閉</p>
+        </div>
+    </div>
+
+    <!-- System Settings Modal -->
+    <div id="settingsModal"
+        class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <h3 class="text-xl font-bold flex items-center gap-2">
+                <svg class="w-6 h-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                系統設定
+            </h3>
+
+            <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+
+                <div>
+                    <label class="label">管理者名單</label>
+                    <p class="text-xs text-slate-500 mb-1">目前系統管理員。</p>
+                    <div id="adminList" class="flex flex-wrap gap-2 mb-2"></div>
+
+                    <div id="adminMgmtSection" class="flex gap-2">
+                        <select id="newAdminRole" class="input w-28 text-xs">
+                            <option value="ADMIN">一般管理</option>
+                            <option value="SUPER_ADMIN">系統管理</option>
+                        </select>
+                        <input type="text" id="newAdminUser" class="input flex-1 text-sm" placeholder="新帳號">
+                        <input type="text" id="newAdminPass" class="input flex-1 text-sm" placeholder="新密碼">
+                        <button onclick="addAdmin()" class="btn btn-secondary text-xs">新增</button>
+                    </div>
+                </div>
+
+                <!-- Legacy Email Config Removed -->
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="label">AI Provider</label>
+                        <select id="sysAiProvider" class="input">
+                            <option value="OPENAI">OpenAI</option>
+                            <option value="GEMINI">Gemini</option>
+                        </select>
+                    </div>
+                    <div>
+                        <!-- Placeholder -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label">AI API Key</label>
+                    <div class="relative">
+                        <input type="password" id="sysAiApiKey" class="input pr-10">
+                        <button onclick="toggleShowKey('sysAiApiKey')" type="button"
+                            class="absolute right-2 top-2 text-slate-400 hover:text-slate-600">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label">Upload Folder ID</label>
+                    <p class="text-xs text-slate-500 mb-1">Google Drive 資料夾 ID</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="sysFolderId" class="input font-mono text-sm flex-1">
+                        <button type="button" id="testUploadFolderBtn" onclick="testUploadFolder()" class="btn btn-secondary whitespace-nowrap">Test Folder</button>
+                    </div>
+                    <p id="uploadFolderTestResult" class="text-xs text-slate-500 mt-2 hidden"></p>
+                </div>
+
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <button onclick="document.getElementById('settingsModal').classList.add('hidden')"
+                    class="btn btn-secondary">取消</button>
+                <button onclick="saveSystemSettings()" class="btn btn-primary">儲存設定</button>
+            </div>
+        </div>
+    </div>
+
+    <?!= include('ItcReport'); ?>
+
+    <script>
+        let currentActivityCode = null;
+        let currentActivity = null;
+        let currentSeatData = [];
+        let refreshTimer = null;
+        let activeModalSeat = null;
+        let activeBrush = null;
+        let itcEnabled = false;
+        let itcSelectedCode = '';
+        let itcLockedSeat = null;
+        let itcPendingEvents = [];
+        let itcFlushTimer = null;
+        let itcEventSeq = 0;
+        let seatGridColumns = 10;
+        let AUTH_TOKEN = null;
+        let USERNAME = null;
+        let ROLE = null;
+
+        function showBigText(text) {
+            if (!text) return;
+            document.getElementById('bigTextContent').textContent = text;
+            document.getElementById('bigTextModal').classList.remove('hidden');
+        }
+
+        function closeBigText() {
+            document.getElementById('bigTextModal').classList.add('hidden');
+        }
+
+        function toggleTimeInputs(prefix) {
+            const chk = document.getElementById(prefix + 'IsTimeLimited');
+            const div = document.getElementById(prefix + 'TimeParams');
+            if (chk && div) {
+                if (chk.checked) {
+                    div.classList.remove('hidden');
+                    updateTimeStatus(prefix);
+                } else {
+                    div.classList.add('hidden');
+                }
+            }
+        }
+
+        function setNow(prefix) {
+            const now = new Date();
+            const pad = n => n < 10 ? '0' + n : n;
+            const formatted = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
+                'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+            document.getElementById(prefix + 'StartTime').value = formatted;
+            updateTimeStatus(prefix);
+        }
+
+        // --- Guest Mode Logic ---
+        function startGuestActivity() {
+            const name = document.getElementById('guestActivityName').value.trim();
+            const count = document.getElementById('guestStudentCount').value;
+            const apiKey = document.getElementById('guestApiKey').value.trim();
+            const folderId = document.getElementById('guestFolderId').value.trim();
+
+            if (!name || !apiKey || !folderId) {
+                document.getElementById('guestError').textContent = '請填寫所有必填欄位';
+                document.getElementById('guestError').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('btnGuestStart').disabled = true;
+            document.getElementById('spinGuest').classList.remove('hidden');
+            document.getElementById('guestError').classList.add('hidden');
+
+            const payload = {
+                activityName: name,
+                studentCount: Number(count),
+                AI_API_KEY: apiKey,
+                UPLOAD_FOLDER_ID: folderId
+            };
+
+            google.script.run
+                .withSuccessHandler(act => {
+                    document.getElementById('btnGuestStart').disabled = false;
+                    document.getElementById('spinGuest').classList.add('hidden');
+
+                    showGuestDashboard(act);
+                    Analytics.trackEvent('activity_created', {
+                        activity_id: act.activityCode,
+                        activity_name: act.activityName,
+                        student_count: act.studentCount
+                    });
+                })
+                .withFailureHandler(err => {
+                    document.getElementById('btnGuestStart').disabled = false;
+                    document.getElementById('spinGuest').classList.add('hidden');
+                    document.getElementById('guestError').textContent = '開局失敗: ' + err.message;
+                    document.getElementById('guestError').classList.remove('hidden');
+                })
+                .adminCreateGuestActivity(payload);
+        }
+
+        function handleGuestImportStart(input) {
+            if (input.files && input.files[0]) {
+                const overrides = {
+                    AI_API_KEY: document.getElementById('guestApiKey').value.trim(),
+                    UPLOAD_FOLDER_ID: document.getElementById('guestFolderId').value.trim()
+                };
+                document.getElementById('btnGuestImport').disabled = true;
+                document.getElementById('spinGuestImport').classList.remove('hidden');
+                document.getElementById('guestError').classList.add('hidden');
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const b64 = e.target.result.split(',')[1];
+
+                    google.script.run
+                        .withSuccessHandler(act => {
+                            document.getElementById('btnGuestImport').disabled = false;
+                            document.getElementById('spinGuestImport').classList.add('hidden');
+
+                            showGuestDashboard(act);
+                            Analytics.trackEvent('import_backup', {
+                                activity_id: act.activityCode,
+                                activity_name: act.activityName,
+                                student_count: act.studentCount
+                            });
+
+                            input.value = '';
+                        })
+                        .withFailureHandler(err => {
+                            document.getElementById('btnGuestImport').disabled = false;
+                            document.getElementById('spinGuestImport').classList.add('hidden');
+                            document.getElementById('guestError').textContent = '匯入開局失敗: ' + err.message;
+                            document.getElementById('guestError').classList.remove('hidden');
+                            input.value = '';
+                        })
+                        .adminStartGuestActivityFromBackup(b64, overrides);
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function showGuestDashboard(act) {
+            localStorage.setItem('GUEST_ACTIVITY_CODE', act.activityCode);
+
+            AUTH_TOKEN = null;
+            USERNAME = 'Guest Teacher';
+            ROLE = 'GUEST';
+            currentActivityCode = act.activityCode;
+            currentActivity = act;
+
+            document.getElementById('viewLogin').classList.add('hidden');
+            document.getElementById('viewDashboard').classList.remove('hidden');
+            document.getElementById('displayUsername').textContent = USERNAME;
+
+            Analytics.trackEvent('dashboard_load');
+
+            const createCard = document.getElementById('createActivityCard');
+            if (createCard) createCard.classList.add('hidden');
+            const selectHeader = document.getElementById('selectActivityHeader');
+            if (selectHeader) selectHeader.classList.add('hidden');
+            const activitySelect = document.getElementById('activitySelect');
+            if (activitySelect) activitySelect.classList.add('hidden');
+            const activityInfo = document.getElementById('activityInfo');
+            if (activityInfo) activityInfo.classList.remove('border-t', 'border-slate-700', 'pt-4', 'mt-2');
+
+            loadActivity(act.activityCode);
+
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => {
+                if (currentActivityCode) refreshDashboard();
+            }, 10000);
+        }
+
+        function updateTimeStatus(prefix) {
+            const statusEl = document.getElementById(prefix + 'TimeStatus');
+            if (!statusEl) return;
+
+            const dateStr = document.getElementById(prefix + 'StartTime').value;
+            if (!dateStr) {
+                statusEl.className = 'badge badge-ghost text-xs w-full py-3';
+                statusEl.textContent = '請設定開始時間';
+                return;
+            }
+
+            const startTime = new Date(dateStr).getTime();
+            const limitHours = parseFloat(document.getElementById(prefix + 'LimitHours').value) || 2;
+            const endTime = startTime + (limitHours * 3600000);
+            const now = Date.now();
+
+            if (now < startTime) {
+                statusEl.className = 'badge badge-warning text-slate-800 text-xs w-full py-3';
+                statusEl.textContent = '⏳ 尚未開始';
+            } else if (now > endTime) {
+                statusEl.className = 'badge badge-error text-white text-xs w-full py-3';
+                statusEl.textContent = '🛑 已結束';
+            } else {
+                // Active
+                const left = Math.max(0, endTime - now);
+                const mm = Math.ceil(left / 60000);
+                const hh = Math.floor(mm / 60);
+                const m = mm % 60;
+                statusEl.className = 'badge badge-success text-white text-xs w-full py-3 font-bold animate-pulse';
+                statusEl.textContent = `🟢 進行中 (剩餘 ${hh}h ${m}m)`;
+            }
+        }
+
+        // --- Init ---
+        window.onload = function () {
+            checkLogin();
+        };
+
+        function checkLogin() {
+            // Check for Guest Session first
+            const guestCode = localStorage.getItem('GUEST_ACTIVITY_CODE');
+            if (guestCode) {
+                google.script.run
+                    .withSuccessHandler(data => {
+                        if (data && data.activity) {
+                            showGuestDashboard(data.activity);
+                        } else {
+                            localStorage.removeItem('GUEST_ACTIVITY_CODE');
+                            checkAdminLogin();
+                        }
+                    })
+                    .withFailureHandler(err => {
+                        localStorage.removeItem('GUEST_ACTIVITY_CODE');
+                        checkAdminLogin();
+                    })
+                    .adminGetGuestDashboard(guestCode);
+                return;
+            }
+
+            checkAdminLogin();
+        }
+
+        function checkAdminLogin() {
+            const token = localStorage.getItem('ADMIN_TOKEN');
+            const user = localStorage.getItem('ADMIN_USER');
+
+            if (token) {
+                AUTH_TOKEN = token;
+                USERNAME = user;
+                // Verify by listing admins (lightweight)
+                google.script.run
+                    .withSuccessHandler(list => {
+                        // Update Role from server
+                        const me = list.find(a => a.username === USERNAME);
+                        if (me) {
+                            ROLE = me.role;
+                            localStorage.setItem('ADMIN_ROLE', ROLE);
+                        }
+                        showDashboard();
+                    })
+                    .withFailureHandler(() => {
+                        // Invalid token
+                        logout();
+                    })
+                    .api_adminListAdmins(token);
+            } else {
+                showLogin();
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('viewLogin').classList.remove('hidden');
+            document.getElementById('viewDashboard').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('viewLogin').classList.add('hidden');
+            document.getElementById('viewDashboard').classList.remove('hidden');
+            document.getElementById('displayUsername').textContent = USERNAME || 'Admin';
+
+            Analytics.trackEvent('dashboard_load');
+
+            // Start App Logic
+            refreshActivityList();
+
+            // Setup polling
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => {
+                if (currentActivityCode) checkLatestData();
+            }, 10000); // 10s
+        }
+
+        function doLogin() {
+            const u = document.getElementById('loginUsername').value;
+            const p = document.getElementById('loginPassword').value;
+            document.getElementById('btnLogin').disabled = true;
+            document.getElementById('btnLogin').textContent = '登入中...';
+            document.getElementById('loginError').classList.add('hidden');
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    document.getElementById('btnLogin').disabled = false;
+                    document.getElementById('btnLogin').textContent = '登入';
+
+                    if (res.success) {
+                        localStorage.setItem('ADMIN_TOKEN', res.token);
+                        localStorage.setItem('ADMIN_USER', res.username);
+                        localStorage.setItem('ADMIN_ROLE', res.role); // Save Role
+                        AUTH_TOKEN = res.token;
+                        USERNAME = res.username;
+                        ROLE = res.role; // Update Global Role
+
+                        Analytics.trackEvent('login', { username: USERNAME, role: ROLE });
+
+                        if (res.forceChange) {
+                            isForcedChange = true;
+                            document.getElementById('modalChangePwd').classList.remove('hidden');
+                        } else {
+                            showDashboard();
+                        }
+                    } else {
+                        document.getElementById('loginError').textContent = res.message;
+                        document.getElementById('loginError').classList.remove('hidden');
+                    }
+                })
+                .withFailureHandler(err => {
+                    document.getElementById('btnLogin').disabled = false;
+                    document.getElementById('btnLogin').textContent = '登入';
+                    alert('Error: ' + err.message);
+                })
+                .api_adminLogin(u, p);
+        }
+
+        // Add Enter Key Support
+        window.addEventListener('load', () => {
+            const passInput = document.getElementById('loginPassword');
+            if (passInput) {
+                passInput.addEventListener('keyup', (e) => {
+                    if (e.key === 'Enter') doLogin();
+                });
+            }
+        });
+
+        let isForcedChange = false;
+
+        function doChangePassword() {
+            const oldP = document.getElementById('cpOld').value;
+            const newP = document.getElementById('cpNew').value;
+            const newC = document.getElementById('cpNewConfirm').value;
+
+            if (!newP) return alert('請輸入新密碼');
+            if (newP !== newC) return alert('兩次輸入的密碼不一致');
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    alert('密碼修改成功，請重新登入');
+                    logout();
+                })
+                .withFailureHandler(err => alert('失敗: ' + err.message))
+                .api_adminChangePassword(AUTH_TOKEN, oldP, newP);
+        }
+
+        function openChangePwdModal() {
+            isForcedChange = false;
+            // Reuse the existing modalChangePwd but ensure it's clean
+            document.getElementById('cpOld').value = '';
+            document.getElementById('cpNew').value = '';
+
+            // Update cancel button text logic if needed, but '取消' is fine.
+            document.getElementById('modalChangePwd').classList.remove('hidden');
+        }
+
+        function handleCancelPwd() {
+            if (isForcedChange) {
+                // If forced, cancelling means they don't want to login/change -> Logout
+                logout();
+            } else {
+                // Voluntary -> Just hide
+                document.getElementById('modalChangePwd').classList.add('hidden');
+            }
+        }
+
+        function logout() {
+            // Clear Storage
+            localStorage.removeItem('ADMIN_TOKEN');
+            localStorage.removeItem('ADMIN_USER');
+            localStorage.removeItem('ADMIN_ROLE');
+            localStorage.removeItem('GUEST_ACTIVITY_CODE');
+            AUTH_TOKEN = null;
+            USERNAME = null;
+            ROLE = null;
+            currentActivityCode = null;
+            currentActivity = null;
+            currentSeatData = [];
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+
+            showLogin();
+            window.location.href = "<?= ScriptApp.getService().getUrl() ?>?page=admin";
+        }
+
+        function selectBrush(status) {
+            activeBrush = status;
+            if (status !== null && itcEnabled) setItcEnabled(false);
+
+            // UI Feedback
+            document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500'));
+            const btnId = 'brushBtn_' + (status === null ? 'OFF' : status);
+            const btn = document.getElementById(btnId);
+            if (btn) btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+        }
+
+        const ITC_CODE_META = {
+            ON_ACTIVE: { emoji: '🚀', label: '主動在工作中' },
+            ON_PASSIVE: { emoji: '👂', label: '被動在工作中' },
+            SEEK_HELP: { emoji: '🆘', label: '求助' },
+            UNCLEAR: { emoji: '❓', label: '無法判斷' },
+            OFF_TASK: { emoji: '🚧', label: '不在工作中' },
+            DISRUPTIVE: { emoji: '⚠️', label: '干擾' }
+        };
+
+        function setItcEnabled(enabled) {
+            itcEnabled = !!enabled;
+            if (itcEnabled) selectBrush(null);
+            if (!itcEnabled) itcSelectedCode = '';
+            document.getElementById('btnItcEnable')?.classList.toggle('bg-blue-600', itcEnabled);
+            document.getElementById('btnItcEnable')?.classList.toggle('text-white', itcEnabled);
+            document.getElementById('btnItcDisable')?.classList.toggle('bg-slate-700', !itcEnabled);
+            document.getElementById('btnItcDisable')?.classList.toggle('text-white', !itcEnabled);
+            document.querySelectorAll('.itc-code-btn').forEach(btn => btn.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500'));
+            document.querySelectorAll('.itc-code-btn-mobile').forEach(btn => btn.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500'));
+            document.getElementById('btnItcEnableMobile')?.classList.toggle('bg-blue-600', itcEnabled);
+            document.getElementById('btnItcEnableMobile')?.classList.toggle('text-white', itcEnabled);
+        }
+
+        function setItcCode(code) {
+            if (!itcEnabled) setItcEnabled(true);
+            const same = itcSelectedCode === code;
+            itcSelectedCode = same ? '' : code;
+            document.querySelectorAll('.itc-code-btn').forEach(btn => btn.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500'));
+            document.querySelectorAll('.itc-code-btn-mobile').forEach(btn => btn.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500'));
+            if (!same) {
+                document.getElementById('itcBtn_' + code)?.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500');
+                document.getElementById('itcBtnM_' + code)?.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500');
+            }
+            else setItcEnabled(false);
+        }
+
+        function getItcEmoji(code) {
+            return (ITC_CODE_META[code] || {}).emoji || '';
+        }
+
+        function renderItcSummary() {
+            const grid = document.getElementById('itcSummaryGrid');
+            if (!grid) return;
+            const totals = {};
+            Object.keys(ITC_CODE_META).forEach(code => totals[code] = 0);
+            (currentSeatData || []).forEach(seat => {
+                try {
+                    const counts = JSON.parse(String(seat.itcCountsJson || '{}')) || {};
+                    Object.keys(totals).forEach(code => totals[code] += Number(counts[code] || 0));
+                } catch (err) {}
+            });
+            grid.innerHTML = Object.keys(ITC_CODE_META).map(code => {
+                const meta = ITC_CODE_META[code];
+                return `<div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><div class="text-lg">${meta.emoji}</div><div class="text-[10px] text-slate-500">${meta.label}</div><div class="font-black text-sm">${totals[code]}</div></div>`;
+            }).join('');
+        }
+
+        function toggleItcAnalyticsPanel(forceVisible) {
+            const panel = document.getElementById('itcAnalyticsPanel');
+            if (!panel) return;
+            const visible = typeof forceVisible === 'boolean' ? forceVisible : panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !visible);
+            if (visible) renderItcSummary();
+        }
+
+        function toggleMobileItcTools() {
+            document.getElementById('mobileItcToolsPanel')?.classList.toggle('hidden');
+        }
+
+        function stepGridZoom(delta) {
+            seatGridColumns = Math.max(3, Math.min(12, seatGridColumns + Number(delta || 0)));
+            const grid = document.getElementById('seatGrid');
+            if (grid) grid.style.gridTemplateColumns = `repeat(${seatGridColumns}, minmax(0, 1fr))`;
+            localStorage.setItem('ADMIN_SEAT_GRID_COLUMNS', String(seatGridColumns));
+        }
+
+        function itcMark(itcCode, seatNo) {
+            if (!itcEnabled || !itcCode || !currentActivityCode) return;
+            const now = Date.now();
+            const event = { seatNo: Number(seatNo), itcCode, source: 'dock', mode: 'itc', intervalSec: 0, clientTs: now, seq: ++itcEventSeq, idempotencyKey: `${currentActivityCode}_${seatNo}_${itcEventSeq}_${now}` };
+            itcPendingEvents.push(event);
+            // Any new mark makes the personal-report snapshot stale.
+            itcAnalyticsCache = null;
+            itcLockedSeat = Number(seatNo);
+            const seat = currentSeatData.find(item => Number(item.seatNo) === Number(seatNo));
+            if (seat) {
+                seat.itcLastCode = itcCode;
+                seat.itcLastAt = now;
+                seat.itcTotal = Number(seat.itcTotal || 0) + 1;
+                const counts = (() => { try { return JSON.parse(seat.itcCountsJson || '{}') || {}; } catch (err) { return {}; } })();
+                counts[itcCode] = Number(counts[itcCode] || 0) + 1;
+                seat.itcCountsJson = JSON.stringify(counts);
+            }
+            document.getElementById('itcLockedSeatLabel').textContent = `鎖定座號：${seatNo} 號`;
+            const mobileLock = document.getElementById('itcLockedSeatLabelMobile');
+            if (mobileLock) mobileLock.textContent = `鎖定 ${seatNo}`;
+            renderDashboard({ activity: currentActivity, seats: currentSeatData });
+            if (!itcFlushTimer) itcFlushTimer = setTimeout(flushItcEvents, 1200);
+        }
+
+        function flushItcEvents(onComplete) {
+            itcFlushTimer = null;
+            if (!itcPendingEvents.length || !currentActivityCode) {
+                if (typeof onComplete === 'function') onComplete();
+                return;
+            }
+            const batch = itcPendingEvents.splice(0);
+            const failure = err => {
+                itcPendingEvents = batch.concat(itcPendingEvents);
+                console.error('ITC event flush failed:', err);
+                if (typeof onComplete === 'function') onComplete(err);
+            };
+            const success = () => {
+                itcAnalyticsCache = null;
+                if (typeof onComplete === 'function') onComplete();
+            };
+            const runner = google.script.run.withSuccessHandler(success).withFailureHandler(failure);
+            if (currentActivityCode.startsWith('G-')) runner.adminGuestLogItcEvents(currentActivityCode, batch);
+            else runner.adminLogItcEvents(AUTH_TOKEN, currentActivityCode, batch);
+        }
+
+        // --- Activity Mgmt ---
+        function refreshActivityList(targetCode = null) {
+            const sel = document.getElementById('activitySelect');
+            const currentVal = targetCode || sel.value;
+
+            google.script.run
+                .withSuccessHandler(list => {
+                    console.log('[refreshActivityList] Data received:', list);
+                    if (!list || list.length === 0) {
+                        console.warn('[refreshActivityList] List is empty');
+                    }
+                    sel.innerHTML = '<option value="">-- 請選擇活動 --</option>';
+                    (list || []).forEach(a => {
+                        const opt = document.createElement('option');
+                        opt.value = a.activityCode;
+                        opt.textContent = `[${a.activityCode}] ${a.activityName}`;
+                        sel.appendChild(opt);
+                    });
+
+                    // Restore or Set Selection
+                    console.log('[refreshActivityList] Trying to select:', currentVal);
+                    if (currentVal) {
+                        // Check if exists
+                        if ([...sel.options].some(o => o.value === currentVal)) {
+                            sel.value = currentVal;
+                            console.log('[refreshActivityList] Selected:', currentVal);
+                        } else {
+                            console.warn('[refreshActivityList] Target not found in list:', currentVal);
+                        }
+                    }
+                })
+                .withFailureHandler(err => {
+                    console.error('[refreshActivityList] Failed:', err);
+                    alert('載入活動清單失敗: ' + err.message);
+                })
+                .adminListActivities(AUTH_TOKEN);
+        }
+
+        function createActivity() {
+            const name = document.getElementById('newActivityName').value.trim();
+            const count = document.getElementById('newStudentCount').value;
+            const enableAI = document.getElementById('newEnableAI').checked;
+
+            // Time Limit
+            const isTimeLimited = document.getElementById('newIsTimeLimited').checked;
+            let startTime = 0;
+            let limitHours = 0;
+
+            if (isTimeLimited) {
+                const dateStr = document.getElementById('newStartTime').value;
+                if (!dateStr) {
+                    alert('請設定開始時間');
+                    return;
+                }
+                startTime = new Date(dateStr).getTime();
+                limitHours = parseFloat(document.getElementById('newLimitHours').value) || 2;
+            }
+
+            if (!name) return alert('請輸入活動名稱');
+
+            const payload = {
+                activityName: name,
+                className: document.getElementById('newClassName').value.trim(),
+                studentCount: Number(count),
+                enableAI: enableAI,
+                enableSeatLock: document.getElementById('newEnableSeatLock').checked,
+                isTimeLimited: isTimeLimited,
+                startTime: startTime,
+                limitHours: limitHours
+            };
+
+            document.getElementById('btnCreate').disabled = true;
+            document.getElementById('spinCreate').classList.remove('hidden');
+
+            google.script.run
+                .withSuccessHandler(act => {
+                    document.getElementById('btnCreate').disabled = false;
+                    document.getElementById('spinCreate').classList.add('hidden');
+                    // clear inputs
+                    document.getElementById('newActivityName').value = '';
+
+                    // Load Data immediately
+                    loadActivity(act.activityCode);
+
+                    // Refresh list and select new item
+                    refreshActivityList(act.activityCode);
+                    Analytics.trackEvent('activity_created', {
+                        activity_id: act.activityCode,
+                        activity_name: act.activityName,
+                        student_count: act.studentCount
+                    });
+                })
+                .withFailureHandler(err => {
+                    alert('Error: ' + err.message);
+                    document.getElementById('btnCreate').disabled = false;
+                    document.getElementById('spinCreate').classList.add('hidden');
+                })
+                .adminCreateActivity(AUTH_TOKEN, payload);
+        }
+
+        function loadActivity(code) {
+            if (!code) {
+                currentActivityCode = null;
+                document.getElementById('activityInfo').classList.add('hidden');
+                document.getElementById('seatGrid').innerHTML = '<div class="col-span-full py-12 text-center text-slate-400">請選擇活動</div>';
+                return;
+            }
+
+            currentActivityCode = code;
+            currentActivity = null; // Clear stale data
+
+            // Update info panel
+            document.getElementById('displayCode').textContent = code;
+
+            // Disable Edit Button while loading
+            const btnEdit = document.getElementById('btnOpenEdit');
+            if (btnEdit) {
+                btnEdit.disabled = true;
+                btnEdit.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            const url = "<?= ScriptApp.getService().getUrl() ?>?page=student&code=" + code;
+            document.getElementById('joinLink').value = url;
+            document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=' + encodeURIComponent(url);
+            document.getElementById('activityInfo').classList.remove('hidden');
+
+            refreshDashboard();
+        }
+
+        function refreshDashboard() {
+            if (!currentActivityCode) return;
+            document.getElementById('lastUpdated').textContent = 'Updating...';
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(renderDashboard)
+                    .withFailureHandler(e => console.error(e))
+                    .adminGetGuestDashboard(currentActivityCode);
+            } else {
+                google.script.run
+                    .withSuccessHandler(renderDashboard)
+                    .withFailureHandler(e => {
+                        if (String(e.message).includes('Access denied') || String(e.message).includes('權限')) {
+                            logout();
+                        } else {
+                            console.error(e);
+                        }
+                    })
+                    .adminGetDashboard(AUTH_TOKEN, currentActivityCode);
+            }
+        }
+
+        function checkLatestData() {
+            // logic: just call refreshDashboard for now. 
+            // efficient way is to check Last-Modified but polling full data for Admin is OK for < 100 seats.
+            refreshDashboard();
+        }
+
+        function renderDashboard(data) {
+            currentSeatData = data.seats || []; // definitions
+            const activity = data.activity;
+            currentActivity = activity; // Save for modal usage
+
+            // Enable Edit Button
+            const btnEdit = document.getElementById('btnOpenEdit');
+            if (btnEdit) {
+                btnEdit.disabled = false;
+                btnEdit.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            // STOP overwriting edit modal inputs here to prevent auto-refresh conflicts
+
+            const grid = document.getElementById('seatGrid');
+            grid.innerHTML = '';
+
+            // Add Guest Export Button to title area if guest
+            let exportBtnHtml = '';
+            if (ROLE === 'GUEST') {
+                exportBtnHtml = `<button onclick="exportGuestCSV()" class="btn btn-xs bg-emerald-100 text-emerald-800 border border-emerald-300 ml-4">📥 匯出紀錄 (CSV)</button>`;
+            }
+
+            document.getElementById('dashboardTitle').innerHTML = activity.activityName + ' (' + activity.studentCount + '人)' + exportBtnHtml;
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+
+            currentSeatData.forEach(seat => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'relative group'; // Wrapper for positioning outside elements
+
+                const div = document.createElement('div');
+
+                let colorClass = 'seat-none';
+                if (seat.lightStatus === 'RED') colorClass = 'seat-red';
+                if (seat.lightStatus === 'YELLOW') colorClass = 'seat-yellow';
+                if (seat.lightStatus === 'GREEN') colorClass = 'seat-green';
+
+                // Add cursor style based on mode
+                const cursorClass = activeBrush !== null ? 'cursor-cell' : 'cursor-pointer';
+
+                div.className = `seat ${colorClass} relative overflow-hidden ${cursorClass}`; // overflow hidden for bg image
+                div.dataset.seatNo = String(seat.seatNo);
+                div.onclick = () => handleSeatClick(seat.seatNo);
+
+                // Login Status Indicator (Top Right)
+                const statusDot = document.createElement('div');
+                statusDot.className = `absolute top-2 right-2 w-3 h-3 rounded-full border border-white shadow-sm z-20 ${seat.isOccupied ? 'bg-green-500' : 'bg-slate-300 opacity-50'}`;
+                statusDot.title = seat.isOccupied ? '已登入' : '未登入';
+                div.appendChild(statusDot);
+                if (typeof decorateIrsSeat === 'function') decorateIrsSeat(div, seat.seatNo);
+
+                // Help Indicator (Outside - Top Left)
+                if (seat.isHelpRequested === true || seat.isHelpRequested === 'true') {
+                    const helpBadge = document.createElement('div');
+                    helpBadge.className = 'absolute -top-3 -left-3 p-1 z-30 animate-bounce drop-shadow-md';
+                    helpBadge.innerHTML = '<span class="text-3xl">🚨</span>'; // Enlarge icon
+                    wrapper.appendChild(helpBadge); // Append to wrapper, not div
+                }
+
+                // Background Image (Thumbnail)
+                if (seat.latestPhotoUrl) {
+                    // Use a div with bg-image to cover
+                    const bg = document.createElement('div');
+                    bg.className = 'absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay pointer-events-none';
+                    bg.style.backgroundImage = `url('${seat.latestPhotoUrl}')`;
+                    div.appendChild(bg);
+                }
+
+                // Seat Number
+                const span = document.createElement('span');
+                span.className = 'text-2xl font-black font-mono relative z-10 drop-shadow-md';
+                span.textContent = seat.seatNo;
+                div.appendChild(span);
+
+                // ITC latest mark and total count
+                if (seat.itcLastCode) {
+                    const itcBadge = document.createElement('span');
+                    itcBadge.className = 'absolute bottom-1 left-1 text-[10px] font-black bg-white/95 border border-slate-200 px-1.5 py-0.5 rounded-full text-slate-700 shadow-sm z-20';
+                    itcBadge.textContent = `${getItcEmoji(seat.itcLastCode)} I:${Number(seat.itcTotal || 0)}x`;
+                    itcBadge.title = `ITC 總計 ${Number(seat.itcTotal || 0)} 次`;
+                    div.appendChild(itcBadge);
+                }
+
+                // Score preview
+                if (seat.latestAiScore !== null && seat.latestAiScore !== '') {
+                    const scoreBadge = document.createElement('span');
+                    scoreBadge.className = 'absolute bottom-1 right-1 text-[10px] font-bold opacity-90 bg-black/20 px-1 rounded text-white z-10';
+                    scoreBadge.textContent = seat.latestAiScore;
+                    div.appendChild(scoreBadge);
+                }
+
+                // Time Ago
+                if (seat.lastSubmitAt) {
+                    const timeBadge = document.createElement('span');
+                    timeBadge.className = 'absolute top-1 left-1 text-[9px] font-bold opacity-80 text-white z-10';
+                    timeBadge.textContent = timeAgo(seat.lastSubmitAt);
+                    div.appendChild(timeBadge);
+                }
+
+                wrapper.appendChild(div);
+                grid.appendChild(wrapper);
+            });
+            renderItcSummary();
+        }
+
+        function timeAgo(ts) {
+            if (!ts) return '';
+            const diff = (Date.now() - ts) / 60000; // minutes
+            if (diff < 1) return '剛剛';
+            if (diff < 60) return Math.floor(diff) + 'm';
+            if (diff < 1440) return Math.floor(diff / 60) + 'h';
+            return Math.floor(diff / 1440) + 'd';
+        }
+
+        // --- Modal ---
+        function openModal(seatNo) {
+            activeModalSeat = seatNo;
+            const seat = currentSeatData.find(s => s.seatNo === seatNo);
+            if (!seat) return;
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('modalContent');
+
+            document.getElementById('modalSeatNo').textContent = seatNo;
+
+            // Help Button
+            const btnHelp = document.getElementById('btnResolveHelp');
+            if (seat.isHelpRequested === true || seat.isHelpRequested === 'true') {
+                btnHelp.classList.remove('hidden');
+                btnHelp.onclick = () => handleResolveHelp(seatNo);
+            } else {
+                btnHelp.classList.add('hidden');
+            }
+
+            // Badge
+            const badge = document.getElementById('modalLightBadge');
+            badge.className = `badge badge-${seat.lightStatus ? seat.lightStatus.toLowerCase() : 'none'} scale-125`;
+            badge.textContent = seat.lightStatus || 'NONE';
+
+            // Photo
+            const img = document.getElementById('modalPhoto');
+            const noPhoto = document.getElementById('modalNoPhoto');
+            const link = document.getElementById('modalNewTabDetails');
+
+            if (seat.latestPhotoUrl) {
+                img.src = seat.latestPhotoUrl;
+                img.classList.remove('hidden');
+                noPhoto.classList.add('hidden');
+                link.href = seat.latestPhotoUrl;
+                link.classList.remove('hidden');
+            } else {
+                img.src = '';
+                img.classList.add('hidden');
+                noPhoto.classList.remove('hidden');
+                link.classList.add('hidden');
+            }
+
+            // AI
+            document.getElementById('modalScore').textContent = seat.latestAiScore || '--';
+            document.getElementById('modalScore').textContent = seat.latestAiScore || '--';
+
+            const suggestionEl = document.getElementById('modalSuggestion');
+            if (seat.latestAiSuggestion) {
+                suggestionEl.innerHTML = marked.parse(seat.latestAiSuggestion);
+                suggestionEl.classList.add('markdown-body');
+            } else {
+                suggestionEl.textContent = '尚無建議';
+                suggestionEl.classList.remove('markdown-body');
+            }
+
+            // History
+            loadHistory(seatNo);
+
+            // Show
+            modal.classList.remove('hidden');
+            // Animation timeout
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('modalContent');
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+            activeModalSeat = null;
+        }
+
+        function setAdminPhotoBusy(isBusy, message) {
+            ['adminCameraBtn', 'adminPhotoFileBtn', 'adminPhotoDeleteBtn'].forEach(id => {
+                const button = document.getElementById(id);
+                if (button) button.disabled = !!isBusy;
+            });
+            const status = document.getElementById('adminPhotoStatus');
+            if (status) status.textContent = message || '';
+        }
+
+        function openAdminCamera() {
+            if (!activeModalSeat) return alert('請先選擇座位');
+            if (typeof startRgbHostedCamera === 'function' && startRgbHostedCamera('admin')) return;
+            document.getElementById('adminCameraInput').click();
+        }
+
+        function openAdminPhotoFilePicker() {
+            if (!activeModalSeat) return alert('請先選擇座位');
+            document.getElementById('adminPhotoFileInput').click();
+        }
+
+        function handleAdminPhotoFile(input) {
+            const file = input && input.files && input.files[0];
+            if (!file) return;
+            if (!String(file.type || '').startsWith('image/')) {
+                input.value = '';
+                return alert('請選擇圖片檔案');
+            }
+            const reader = new FileReader();
+            reader.onload = event => openAdminEditor(event.target.result);
+            reader.onerror = () => alert('無法讀取圖片，請重新選擇');
+            reader.readAsDataURL(file);
+            input.value = '';
+        }
+
+        function openAdminEditor(imageDataUrl) {
+            const image = new Image();
+            image.onload = () => {
+                const maxSide = 1920;
+                const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+                canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+                const context = canvas.getContext('2d');
+                context.imageSmoothingEnabled = true;
+                context.imageSmoothingQuality = 'high';
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                uploadAdminPhoto(canvas.toDataURL('image/jpeg', 0.85).split(',')[1], 'image/jpeg');
+            };
+            image.onerror = () => alert('圖片格式無法處理，請改選其他照片');
+            image.src = imageDataUrl;
+        }
+
+        function uploadAdminPhoto(base64, mimeType) {
+            const seatNo = activeModalSeat;
+            if (!seatNo || !currentActivityCode) return alert('請先選擇活動與座位');
+            setAdminPhotoBusy(true, '上傳中（不執行 AI）…');
+            const payload = {
+                activityCode: currentActivityCode,
+                className: currentActivity && currentActivity.className || '',
+                seatNo,
+                fileData: { base64, mimeType: mimeType || 'image/jpeg' }
+            };
+            const success = updatedSeat => {
+                setAdminPhotoBusy(false, '上傳完成');
+                const index = currentSeatData.findIndex(seat => Number(seat.seatNo) === Number(seatNo));
+                if (index >= 0 && updatedSeat) currentSeatData[index] = Object.assign({}, currentSeatData[index], updatedSeat);
+                openModal(seatNo);
+                refreshDashboard();
+                Analytics.trackEvent('admin_submit_photo', { seat_no: seatNo });
+            };
+            const failure = error => {
+                setAdminPhotoBusy(false, '上傳失敗');
+                alert('照片上傳失敗：' + (error && error.message ? error.message : error));
+            };
+            const runner = google.script.run.withSuccessHandler(success).withFailureHandler(failure);
+            if (String(currentActivityCode).startsWith('G-')) runner.adminGuestSubmitSeatPhoto(payload);
+            else runner.adminSubmitSeatPhoto(AUTH_TOKEN, payload);
+        }
+
+        function deleteAdminSeatPhoto() {
+            const seatNo = activeModalSeat;
+            const seat = currentSeatData.find(item => Number(item.seatNo) === Number(seatNo));
+            if (!seat || !seat.latestPhotoUrl) return alert('目前沒有照片可移除');
+            if (!confirm(`確定移除第 ${seatNo} 號目前顯示的照片與 AI 結果？\n歷史紀錄與 Drive 原檔會保留。`)) return;
+            setAdminPhotoBusy(true, '移除中…');
+            const success = updatedSeat => {
+                setAdminPhotoBusy(false, '已移除');
+                const index = currentSeatData.findIndex(item => Number(item.seatNo) === Number(seatNo));
+                if (index >= 0 && updatedSeat) currentSeatData[index] = Object.assign({}, currentSeatData[index], updatedSeat);
+                openModal(seatNo);
+                refreshDashboard();
+            };
+            const failure = error => {
+                setAdminPhotoBusy(false, '移除失敗');
+                alert('照片移除失敗：' + (error && error.message ? error.message : error));
+            };
+            const runner = google.script.run.withSuccessHandler(success).withFailureHandler(failure);
+            if (String(currentActivityCode).startsWith('G-')) runner.adminGuestDeleteSeatPhoto(currentActivityCode, seatNo);
+            else runner.adminDeleteSeatPhoto(AUTH_TOKEN, currentActivityCode, seatNo);
+        }
+
+        function loadHistory(seatNo) {
+            loadSeatIrsHistory(seatNo);
+            const container = document.getElementById('historyList');
+            if (!container) return; // Add container to HTML if not exists
+            const count = document.getElementById('historyCount');
+            if (count) count.textContent = '';
+            container.innerHTML = '<div class="text-center py-2 text-xs text-slate-400">載入中...</div>';
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(list => renderSeatSubmissionHistory(container, list, seatNo, true))
+                    .withFailureHandler(err => {
+                        container.innerHTML = `<div class="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">作品紀錄載入失敗：${escapeAdminHistoryHtml(err && err.message ? err.message : err)}</div>`;
+                    })
+                    .adminGuestGetSeatHistory(currentActivityCode, seatNo);
+                return;
+            }
+
+            google.script.run
+                .withSuccessHandler(raw => {
+                    try {
+                        const list = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                        renderSeatSubmissionHistory(container, list, seatNo, false);
+                    } catch (error) {
+                        container.innerHTML = `<div class="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">作品紀錄格式錯誤：${escapeAdminHistoryHtml(error && error.message ? error.message : error)}</div>`;
+                    }
+                })
+                .withFailureHandler(err => {
+                    container.innerHTML = `<div class="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">作品紀錄載入失敗：${escapeAdminHistoryHtml(err && err.message ? err.message : err)}</div>`;
+                })
+                .adminGetSeatHistoryJson(AUTH_TOKEN, currentActivityCode, seatNo);
+        }
+
+        let activeSeatSubmissionHistory = [];
+
+        function renderSeatSubmissionHistory(container, list, seatNo, includeCurrentFallback) {
+            const rows = Array.isArray(list) ? list.slice() : [];
+            if (!rows.length && includeCurrentFallback) {
+                const seat = currentSeatData.find(item => Number(item.seatNo) === Number(seatNo));
+                if (seat && seat.latestPhotoUrl) rows.push({
+                    photoUrl: seat.latestPhotoUrl,
+                    lightStatus: seat.lightStatus,
+                    aiScore: seat.latestAiScore,
+                    aiSuggestion: seat.latestAiSuggestion,
+                    uploadAt: seat.lastSubmitAt,
+                    isCacheFallback: true
+                });
+            }
+            const countLabel = document.getElementById('historyCount');
+            if (countLabel) countLabel.textContent = `（${rows.length}）`;
+            activeSeatSubmissionHistory = rows;
+            if (!rows.length) {
+                container.innerHTML = '<div class="text-center py-2 text-xs text-slate-400">此座號尚無作品上傳紀錄</div>';
+                return;
+            }
+            container.innerHTML = rows.map((item, index) => {
+                const time = item.uploadAt ? new Date(item.uploadAt).toLocaleString('zh-TW') : '時間不明';
+                const score = item.aiScore !== '' && item.aiScore != null ? `${escapeAdminHistoryHtml(item.aiScore)} 分` : '未評分';
+                const sourceLabel = item.recoveredFromDrive ? '（Drive 復原）' : (item.isCacheFallback ? '（目前快取）' : '');
+                const thumbnail = item.photoUrl
+                    ? `<img src="${escapeAdminHistoryHtml(item.photoUrl)}" alt="作品縮圖" class="h-12 w-12 shrink-0 rounded-lg bg-slate-200 object-cover">`
+                    : '<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-lg text-slate-400">🖼️</div>';
+                return `<button type="button" onclick="openAdminSubmissionHistory(${index})" class="flex w-full items-center gap-3 border-b border-slate-100 py-2 text-left text-sm last:border-0 hover:bg-blue-50">${thumbnail}<div class="min-w-0 flex-1"><div class="text-xs text-slate-500">${time}${sourceLabel}</div><div class="font-bold ${item.lightStatus === 'GREEN' ? 'text-green-600' : 'text-slate-700'}">${score}</div>${item.aiSuggestion ? `<div class="mt-1 truncate text-[10px] text-slate-400">${escapeAdminHistoryHtml(item.aiSuggestion)}</div>` : ''}</div><span class="shrink-0 text-xs font-bold text-blue-600">查看詳情</span></button>`;
+            }).join('');
+        }
+
+        function openAdminSubmissionHistory(index) {
+            const item = activeSeatSubmissionHistory[index];
+            if (!item) return;
+            const light = String(item.lightStatus || 'NONE').toUpperCase();
+            const timeValue = item.uploadAt ? new Date(Number(item.uploadAt) || item.uploadAt) : null;
+            document.getElementById('historyDetailTime').textContent = timeValue && !Number.isNaN(timeValue.getTime()) ? timeValue.toLocaleString('zh-TW') : '時間不明';
+            document.getElementById('historyDetailScore').textContent = item.aiScore !== '' && item.aiScore != null ? `${item.aiScore} 分` : '未評分';
+            const badge = document.getElementById('historyDetailLight');
+            badge.className = `badge badge-${light.toLowerCase()}`;
+            badge.textContent = light;
+
+            const image = document.getElementById('historyDetailPhoto');
+            const noPhoto = document.getElementById('historyDetailNoPhoto');
+            const photoLink = document.getElementById('historyDetailOpenPhoto');
+            if (item.photoUrl) {
+                image.src = item.photoUrl;
+                image.classList.remove('hidden');
+                noPhoto.classList.add('hidden');
+                photoLink.href = item.photoUrl;
+                photoLink.classList.remove('hidden');
+            } else {
+                image.removeAttribute('src');
+                image.classList.add('hidden');
+                noPhoto.classList.remove('hidden');
+                photoLink.classList.add('hidden');
+            }
+
+            const suggestion = document.getElementById('historyDetailSuggestion');
+            if (item.aiSuggestion) {
+                suggestion.innerHTML = marked.parse(String(item.aiSuggestion));
+                suggestion.classList.add('markdown-body');
+            } else {
+                suggestion.textContent = '尚無建議';
+                suggestion.classList.remove('markdown-body');
+            }
+            document.getElementById('historyDetailModal').classList.remove('hidden');
+        }
+
+        function closeAdminSubmissionHistory() {
+            document.getElementById('historyDetailModal').classList.add('hidden');
+        }
+
+        function escapeAdminHistoryHtml(value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+
+        function loadSeatIrsHistory(seatNo) {
+            const container = document.getElementById('seatIrsHistoryList');
+            if (!container || !currentActivityCode) return;
+            container.innerHTML = '<div class="py-2 text-center text-xs text-slate-400">正在載入 IRS 作答紀錄…</div>';
+            const success = list => {
+                if (!Array.isArray(list) || !list.length) {
+                    container.innerHTML = '<div class="py-2 text-center text-xs text-slate-400">此座號尚無 IRS 作答紀錄</div>';
+                    return;
+                }
+                container.innerHTML = list.map(item => {
+                    const time = item.submittedAt ? new Date(item.submittedAt).toLocaleString('zh-TW') : '時間不明';
+                    let result = '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">不計分</span>';
+                    if (item.isCorrect === true) result = '<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">答對・100 分</span>';
+                    if (item.isCorrect === false) result = '<span class="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">答錯・0 分</span>';
+                    return `<div class="rounded-xl border border-purple-100 bg-purple-50/60 p-3"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="truncate text-xs font-black text-slate-700" title="${escapeAdminHistoryHtml(item.prompt)}">${escapeAdminHistoryHtml(item.prompt)}</div><div class="mt-1 break-words text-sm text-slate-800"><b>作答：</b>${escapeAdminHistoryHtml(item.answer)}</div>${item.correctOption ? `<div class="mt-1 text-xs text-slate-500">正確答案：${escapeAdminHistoryHtml(item.correctOption)}</div>` : ''}</div>${result}</div><div class="mt-2 text-[10px] text-slate-400">${time}</div></div>`;
+                }).join('');
+            };
+            const failure = err => {
+                container.innerHTML = `<div class="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">IRS 紀錄載入失敗：${escapeAdminHistoryHtml(err && err.message ? err.message : err)}</div>`;
+            };
+            const runner = google.script.run.withSuccessHandler(success).withFailureHandler(failure);
+            if (String(currentActivityCode).startsWith('G-')) runner.adminGuestGetSeatIrsHistory(currentActivityCode, seatNo);
+            else runner.adminGetSeatIrsHistory(AUTH_TOKEN, currentActivityCode, seatNo);
+        }
+
+        function ensureEditSeatLockField() {
+            if (document.getElementById('editEnableSeatLock')) return;
+
+            const aiCheckbox = document.getElementById('editEnableAI');
+            if (!aiCheckbox || !aiCheckbox.parentElement) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex items-center mt-2';
+            wrapper.innerHTML = `
+                <input type="checkbox" id="editEnableSeatLock" class="w-5 h-5 text-blue-600 rounded">
+                <label for="editEnableSeatLock" class="ml-2 text-sm font-bold text-slate-700">Lock selected seats</label>
+            `;
+            aiCheckbox.parentElement.insertAdjacentElement('afterend', wrapper);
+        }
+
+        function ensureGuestCredentialFields() {
+            if (document.getElementById('guestCredentialFields')) return;
+
+            const rubric = document.getElementById('editRubric');
+            if (!rubric || !rubric.parentElement) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.id = 'guestCredentialFields';
+            wrapper.className = 'space-y-4 hidden';
+            wrapper.innerHTML = `
+                <div>
+                    <label class="label">Guest API Key</label>
+                    <input type="password" id="editGuestApiKey" class="input" placeholder="sk-...">
+                </div>
+                <div>
+                    <label class="label">Guest Drive Folder ID</label>
+                    <input type="text" id="editGuestFolderId" class="input font-mono text-sm" placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ">
+                </div>
+            `;
+            rubric.parentElement.insertAdjacentElement('afterend', wrapper);
+        }
+
+        function openEditModal() {
+            if (!currentActivityCode || !currentActivity) return;
+            // Safety check: ensure loaded data matches current code
+            if (currentActivity.activityCode !== currentActivityCode) return;
+
+            ensureEditSeatLockField();
+            ensureGuestCredentialFields();
+            document.getElementById('editActivityName').value = currentActivity.activityName;
+            document.getElementById('editClassName').value = currentActivity.className || '';
+            document.getElementById('editStudentCount').value = currentActivity.studentCount;
+            document.getElementById('editRubric').value = currentActivity.rubric || '';
+            document.getElementById('editEnableAI').checked = currentActivity.enableAI;
+            document.getElementById('editEnableSeatLock').checked = !!currentActivity.enableSeatLock;
+
+            const guestFields = document.getElementById('guestCredentialFields');
+            if (currentActivityCode.startsWith('G-')) {
+                guestFields.classList.remove('hidden');
+                document.getElementById('editGuestApiKey').value = currentActivity.AI_API_KEY || '';
+                document.getElementById('editGuestFolderId').value = currentActivity.UPLOAD_FOLDER_ID || '';
+            } else {
+                guestFields.classList.add('hidden');
+            }
+
+            // Time Limit populate
+            const isLim = !!currentActivity.isTimeLimited;
+            document.getElementById('editIsTimeLimited').checked = isLim;
+            toggleTimeInputs('edit');
+
+            if (isLim && currentActivity.startTime) {
+                const date = new Date(currentActivity.startTime);
+                // Adjust to local ISO format for input
+                const pad = n => n < 10 ? '0' + n : n;
+                const formatted = date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+                    'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+
+                document.getElementById('editStartTime').value = formatted;
+                document.getElementById('editLimitHours').value = currentActivity.limitHours || 2;
+            }
+
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function exportBackup() {
+            if (!currentActivityCode) return;
+
+            const successHandler = res => {
+                const link = document.createElement('a');
+                link.href = 'data:application/zip;base64,' + res.base64;
+                link.download = res.filename;
+                link.click();
+                Analytics.trackEvent('backup');
+                const count = Number(res.submissionCount || 0);
+                alert(`備份已匯出，包含 ${count} 筆作品歷史紀錄。`);
+            };
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .withFailureHandler(alert)
+                    .adminExportGuestActivity(currentActivityCode);
+            } else {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .withFailureHandler(alert)
+                    .adminExportActivity(AUTH_TOKEN, currentActivityCode);
+            }
+        }
+
+        function sendBackupEmail() {
+            if (!currentActivityCode) {
+                alert('請先選擇活動');
+                return;
+            }
+            const email = document.getElementById('backupEmail').value.trim();
+            if (!email || !email.includes('@')) {
+                alert('請輸入有效的信箱地址');
+                return;
+            }
+
+            const btn = document.getElementById('btnSendBackup');
+            const spin = document.getElementById('spinSendEmail');
+            btn.disabled = true;
+            spin.classList.remove('hidden');
+
+            const successHandler = function (res) {
+                btn.disabled = false;
+                spin.classList.add('hidden');
+                if (res.success) {
+                    alert('備份信件寄送成功！請檢查您的信箱。');
+                    document.getElementById('backupEmail').value = '';
+                    Analytics.trackEvent('email_backup');
+                } else {
+                    alert('寄信失敗：' + res.error);
+                }
+            };
+
+            const failHandler = function (err) {
+                btn.disabled = false;
+                spin.classList.add('hidden');
+                alert('寄送過程發生錯誤：' + err.message);
+            };
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .withFailureHandler(failHandler)
+                    .adminSendGuestBackupEmail(currentActivityCode, email);
+            } else {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .withFailureHandler(failHandler)
+                    .adminSendBackupEmail(AUTH_TOKEN, currentActivityCode, email);
+            }
+        }
+
+        function handleImport(input) {
+            if (input.files && input.files[0]) {
+                if (!confirm('匯入將會覆蓋當前活動資料，確定嗎？')) return;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const b64 = e.target.result.split(',')[1];
+
+                    if (currentActivityCode && currentActivityCode.startsWith('G-')) {
+                        google.script.run
+                            .withSuccessHandler(act => {
+                                alert('訪客備份匯入成功！');
+                                loadActivity(act.activityCode);
+                                Analytics.trackEvent('import_backup', { activity_id: act.activityCode, activity_name: act.activityName });
+                                input.value = '';
+                            })
+                            .withFailureHandler(err => {
+                                alert('匯入失敗: ' + err.message);
+                                input.value = '';
+                            })
+                            .adminImportGuestActivity(currentActivityCode, b64);
+                    } else {
+                        google.script.run
+                            .withSuccessHandler(act => {
+                                alert('匯入成功！代碼：' + act.activityCode);
+                                refreshActivityList();
+                                Analytics.trackEvent('import_backup', { activity_id: act.activityCode, activity_name: act.activityName });
+                                input.value = '';
+                            })
+                            .withFailureHandler(err => {
+                                alert('匯入失敗: ' + err.message);
+                                input.value = '';
+                            })
+                            .adminImportActivity(AUTH_TOKEN, b64);
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function saveActivitySettings() {
+            // Validate Time if enabled
+            const isTimeLimited = document.getElementById('editIsTimeLimited').checked;
+            let startTime = 0;
+            let limitHours = 0;
+
+            if (isTimeLimited) {
+                const dateStr = document.getElementById('editStartTime').value;
+                if (!dateStr) {
+                    alert('請設定開始時間');
+                    return;
+                }
+                startTime = new Date(dateStr).getTime();
+                limitHours = parseFloat(document.getElementById('editLimitHours').value) || 2;
+            }
+
+            const payload = {
+                activityCode: currentActivityCode,
+                activityName: document.getElementById('editActivityName').value,
+                className: document.getElementById('editClassName').value,
+                studentCount: document.getElementById('editStudentCount').value,
+                rubric: document.getElementById('editRubric').value,
+                enableAI: document.getElementById('editEnableAI').checked,
+                enableSeatLock: document.getElementById('editEnableSeatLock').checked,
+                isTimeLimited: isTimeLimited,
+                startTime: startTime,
+                limitHours: limitHours
+            };
+
+            if (currentActivityCode.startsWith('G-')) {
+                payload.AI_API_KEY = document.getElementById('editGuestApiKey').value.trim();
+                payload.UPLOAD_FOLDER_ID = document.getElementById('editGuestFolderId').value.trim();
+            }
+
+            const successHandler = act => {
+                alert('已儲存設定');
+                document.getElementById('editModal').classList.add('hidden');
+                refreshDashboard();
+            };
+
+            const failureHandler = err => alert('儲存失敗: ' + err.message);
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .withFailureHandler(failureHandler)
+                    .adminUpdateGuestActivity(currentActivityCode, payload);
+            } else {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .withFailureHandler(failureHandler)
+                    .adminUpdateActivity(AUTH_TOKEN, payload);
+            }
+        }
+
+        function updateSeatLight(status) {
+            if (!currentActivityCode || !activeModalSeat) return;
+
+            const successHandler = updatedSeat => {
+                // Update local data
+                const idx = currentSeatData.findIndex(s => s.seatNo === activeModalSeat);
+                if (idx >= 0) currentSeatData[idx] = updatedSeat;
+
+                // Refresh Grid UI only (no fetch)
+                renderDashboard({ activity: { activityName: document.getElementById('dashboardTitle').textContent.split(' (')[0], studentCount: currentSeatData.length }, seats: currentSeatData });
+
+                // Update Modal
+                openModal(activeModalSeat);
+            };
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .adminSetGuestSeatLight(currentActivityCode, activeModalSeat, status);
+            } else {
+                google.script.run
+                    .withSuccessHandler(successHandler)
+                    .adminSetSeatLight(AUTH_TOKEN, currentActivityCode, activeModalSeat, status);
+            }
+        }
+
+        function handleSeatClick(seatNo) {
+            if (itcEnabled && itcSelectedCode) {
+                itcMark(itcSelectedCode, seatNo);
+            } else if (activeBrush !== null) {
+                // Paint Mode: Instant update
+                const successHandler = updatedSeat => {
+                    // Optimistic / Silent update local data
+                    const idx = currentSeatData.findIndex(s => s.seatNo === seatNo);
+                    if (idx >= 0) {
+                        currentSeatData[idx] = updatedSeat;
+                        // Partial UI update for performance or full render
+                        renderDashboard({
+                            activity: {
+                                activityName: document.getElementById('dashboardTitle').textContent.split(' (')[0],
+                                studentCount: currentSeatData.length
+                            }, seats: currentSeatData
+                        });
+                    }
+                };
+
+                if (currentActivityCode.startsWith('G-')) {
+                    google.script.run
+                        .withSuccessHandler(successHandler)
+                        .adminSetGuestSeatLight(currentActivityCode, seatNo, activeBrush);
+                } else {
+                    google.script.run
+                        .withSuccessHandler(successHandler)
+                        .adminSetSeatLight(AUTH_TOKEN, currentActivityCode, seatNo, activeBrush);
+                }
+            } else {
+                // View Mode: Open Modal
+                openModal(seatNo);
+            }
+        }
+
+        function handleClearAllHelp() {
+            if (!currentActivityCode) return;
+            if (!confirm('確定要取消所有學生的請求支援嗎？')) return;
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        alert('已取消所有請求支援');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminGuestClearAllHelp(currentActivityCode);
+            } else {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        alert('已取消所有請求支援');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminClearAllHelp(AUTH_TOKEN, currentActivityCode);
+            }
+        }
+
+        function handleClearAllLights() {
+            if (!currentActivityCode) return;
+            if (!confirm('確定要清除所有學生的燈號嗎？')) return;
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        alert('已清除全體燈號');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminGuestClearAllLights(currentActivityCode);
+            } else {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        alert('已清除全體燈號');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminClearAllLights(AUTH_TOKEN, currentActivityCode);
+            }
+        }
+
+        function handleClearAllData() {
+            if (!currentActivityCode) return;
+            if (!confirm('確定要清除所有學生的紀錄並登出全體嗎？\n(這將清空所有燈號、照片、AI評分與評語\n並且將學生強制登出)')) return;
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        alert('已清除全體資料');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminGuestClearAllData(currentActivityCode);
+            } else {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        alert('已清除全體資料');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminClearAllData(AUTH_TOKEN, currentActivityCode);
+            }
+        }
+
+        function handleResolveHelp(seatNo) {
+            if (!currentActivityCode) return;
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        refreshDashboard();
+                        if (activeModalSeat === seatNo) closeModal();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminGuestSetHelpStatus(currentActivityCode, seatNo, false);
+            } else {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        refreshDashboard();
+                        if (activeModalSeat === seatNo) closeModal();
+                    })
+                    .withFailureHandler(err => alert('失敗: ' + err.message))
+                    .adminSetHelpStatus(AUTH_TOKEN, currentActivityCode, seatNo, false);
+            }
+        }
+
+        function handleAdminReleaseSeat() {
+            // Usually this functionality requires a modal or logic to pick whom to release.
+            // If it's a "Force Logout" button, it might need to know which seat.
+            // Based on HTML <button onclick="handleAdminReleaseSeat()" ...> it seems global or for active modal?
+            // Actually, allow me to check the HTML again.
+            // Line 287: <button onclick="handleAdminReleaseSeat()" class="btn btn-xs btn-error text-xs h-8">強制登出</button>
+            // This button is inside the "modalContent". So it acts on `activeModalSeat`.
+
+            if (!currentActivityCode || !activeModalSeat) return;
+            if (!confirm(`確定要強制登出座位 ${activeModalSeat} 嗎？`)) return;
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    alert('已強制登出');
+                    // Update local logic
+                    const idx = currentSeatData.findIndex(s => s.seatNo === activeModalSeat);
+                    if (idx >= 0) {
+                        currentSeatData[idx].isOccupied = false;
+                        renderDashboard({
+                            activity: {
+                                activityName: document.getElementById('dashboardTitle').textContent.split(' (')[0],
+                                studentCount: currentSeatData.length
+                            }, seats: currentSeatData
+                        });
+                    }
+                    if (activeModalSeat) openModal(activeModalSeat);
+                })
+                .withFailureHandler(err => alert('失敗: ' + err.message))
+                .adminReleaseSeat(AUTH_TOKEN, currentActivityCode, activeModalSeat);
+        }
+
+        function handleAdminReleaseAll() {
+            if (!currentActivityCode) return;
+            if (!confirm('確定要強制登出 **所有** 學生嗎？\n這將清除所有人的登入狀態。')) return;
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    alert('已強制登出所有人');
+                    refreshDashboard();
+                })
+                .withFailureHandler(err => alert('失敗: ' + err.message))
+                .adminReleaseAllSeats(AUTH_TOKEN, currentActivityCode);
+        }
+
+        function parseSeatRange(str) {
+            // "1-3, 5, 8-10"
+            const parts = str.split(',');
+            const result = new Set();
+
+            for (let p of parts) {
+                p = p.trim();
+                if (!p) continue;
+
+                if (p.includes('-')) {
+                    const [start, end] = p.split('-').map(Number);
+                    if (!isNaN(start) && !isNaN(end) && start <= end) {
+                        for (let i = start; i <= end; i++) result.add(i);
+                    }
+                } else {
+                    const n = Number(p);
+                    if (!isNaN(n)) result.add(n);
+                }
+            }
+            return Array.from(result);
+        }
+
+        function switchAccount() {
+            logout();
+        }
+
+        function handleAdminReleaseSeat() {
+            if (!activeModalSeat || !currentActivityCode) return;
+            if (!confirm('確定要強制重置 ' + activeModalSeat + ' 號座位嗎？\n這將會清除目前的佔用狀態，讓學生可以重新選擇此座位。')) return;
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(() => {
+                        closeModal();
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .adminGuestReleaseSeat(currentActivityCode, activeModalSeat);
+            } else {
+                google.script.run
+                    .withSuccessHandler(() => {
+                        closeModal();
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .adminReleaseSeat(AUTH_TOKEN, currentActivityCode, activeModalSeat);
+            }
+        }
+
+        function handleAdminReleaseAll() {
+            if (!currentActivityCode) return;
+            // Double confirm
+            if (!confirm('【警告】確定要強制登出「所有」學生嗎？')) return;
+            if (!confirm('再次確認：這將會清除所有座位的佔用狀態，所有學生可能需要重新選擇座位。\n是否繼續？')) return;
+
+            if (currentActivityCode.startsWith('G-')) {
+                google.script.run
+                    .withSuccessHandler(() => {
+                        alert('已全部強制登出！');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .adminGuestReleaseAllSeats(currentActivityCode);
+            } else {
+                google.script.run
+                    .withSuccessHandler(() => {
+                        alert('已全部強制登出！');
+                        refreshDashboard();
+                    })
+                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .adminReleaseAllSeats(AUTH_TOKEN, currentActivityCode);
+            }
+        }
+
+        function exportGuestCSV() {
+            if (!currentActivity || !currentSeatData) return;
+            let csv = '\uFEFF'; // BOM
+            csv += '座號,狀態,AI分數,燈號,最後更新時間,圖片連結,AI評語\n';
+
+            for (let i = 1; i <= currentActivity.studentCount; i++) {
+                const s = currentSeatData.find(x => x.seatNo == i) || {};
+                const seatNo = i;
+                const occ = s.isOccupied ? '已登入' : '未登入';
+                const score = (s.latestAiScore !== undefined && s.latestAiScore !== null) ? s.latestAiScore : '';
+                const light = s.lightStatus || '';
+                const time = s.lastSubmitAt ? new Date(s.lastSubmitAt).toLocaleString() : '';
+                const url = s.latestPhotoUrl || '';
+                // Need to escape quotes in CSV
+                const sugg = (s.latestAiSuggestion || '').replace(/"/g, '""');
+
+                csv += `${seatNo},${occ},${score},${light},${time},${url},"${sugg}"\n`;
+            }
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.setAttribute('download', `${currentActivity.activityName}_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function showBigQr() {
+            const src = document.getElementById('qrImg').src;
+            if (!src) return;
+            // higher res
+            const bigSrc = src.replace('150x150', '500x500');
+            document.getElementById('bigQrImg').src = bigSrc;
+            document.getElementById('bigQrModal').classList.remove('hidden');
+        }
+
+        function closeBigQr() {
+            document.getElementById('bigQrModal').classList.add('hidden');
+        }
+
+        function copyCode() {
+            navigator.clipboard.writeText(document.getElementById('displayCode').textContent);
+        }
+
+        // --- System Settings ---
+        function openSettingsModal() {
+            const btn = document.querySelector('button[title="系統設定"]');
+            const originalContent = btn.innerHTML;
+
+            // Show Spinner
+            btn.innerHTML = `<svg class="animate-spin h-6 w-6 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+            btn.disabled = true;
+
+            const modal = document.getElementById('settingsModal');
+
+            // Reload admins list
+            loadAdminList();
+
+            google.script.run
+                .withSuccessHandler(cfg => {
+                    // Restore button
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+
+                    // Hide Admin Management for non-SUPER_ADMIN
+                    const adminSection = document.getElementById('adminMgmtSection').closest('.card') || document.getElementById('adminMgmtSection').parentElement;
+                    // Actually, simpler: check the container of admin list
+                    // Let's look at the HTML structure. 
+                    // We need to hide the ENTIRE "管理者名單" block if not SUPER_ADMIN?
+                    // User request: "一般管理者 齒輪跳出不要顯示 管理者名單 以及新增管理者功能"
+
+                    const adminContainer = document.getElementById('adminList').parentElement;
+                    if (ROLE !== 'SUPER_ADMIN') {
+                        adminContainer.classList.add('hidden');
+                    } else {
+                        adminContainer.classList.remove('hidden');
+                    }
+
+                    // Removed sysAdminEmails
+                    document.getElementById('sysAiProvider').value = cfg.AI_PROVIDER || 'OPENAI';
+                    document.getElementById('sysAiApiKey').value = cfg.AI_API_KEY || '';
+                    document.getElementById('sysFolderId').value = cfg.UPLOAD_FOLDER_ID || '';
+                    resetUploadFolderTestResult();
+
+                    modal.classList.remove('hidden');
+                })
+                .withFailureHandler(err => {
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+                    alert('無法讀取設定: ' + err.message);
+                })
+                .adminGetSettings(AUTH_TOKEN);
+        }
+
+        function loadAdminList() {
+            document.getElementById('adminList').textContent = 'Loading...';
+            google.script.run
+                .withSuccessHandler(list => {
+                    const container = document.getElementById('adminList');
+                    container.innerHTML = '';
+                    (list || []).forEach(u => {
+                        const tag = document.createElement('div');
+                        tag.className = 'bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-1 border';
+
+                        // u is { username: '...', role: '...' }
+                        // Handle legacy or potential obj structure
+                        let uName = u.username || u;
+                        if (typeof uName === 'object') uName = JSON.stringify(uName);
+
+                        let uRole = u.role || 'ADMIN';
+                        let roleBadge = uRole === 'SUPER_ADMIN' ? '<span class="text-purple-600 font-bold">★</span>' : '';
+
+                        tag.innerHTML = `<span>${uName} <span class="text-[10px] text-slate-400">(${uRole})</span> ${roleBadge}</span>`;
+
+                        // Only SUPER_ADMIN can delete, and cannot delete self
+                        if (ROLE === 'SUPER_ADMIN' && uName !== USERNAME) {
+                            const btnGroup = document.createElement('div');
+                            btnGroup.className = 'flex items-center ml-1 gap-1';
+
+                            // Reset Password
+                            const resetBtn = document.createElement('button');
+                            resetBtn.className = 'text-blue-500 hover:text-blue-700 font-bold px-1';
+                            resetBtn.innerHTML = '↺';
+                            resetBtn.title = '重置密碼';
+                            resetBtn.onclick = () => resetAdminPassword(uName);
+                            btnGroup.appendChild(resetBtn);
+
+                            // Delete
+                            const delBtn = document.createElement('button');
+                            delBtn.className = 'text-red-500 hover:text-red-700 font-bold px-1';
+                            delBtn.innerHTML = '&times;';
+                            delBtn.title = '刪除此管理者';
+                            delBtn.onclick = () => deleteAdmin(uName);
+                            btnGroup.appendChild(delBtn);
+
+                            tag.appendChild(btnGroup);
+                        }
+                        container.appendChild(tag);
+                    });
+                })
+                .api_adminListAdmins(AUTH_TOKEN);
+        }
+
+        function addAdmin() {
+            const u = document.getElementById('newAdminUser').value.trim();
+            const p = document.getElementById('newAdminPass').value.trim();
+            const role = document.getElementById('newAdminRole').value;
+            if (!u || !p) return alert('請輸入帳號和密碼');
+
+            google.script.run
+                .withSuccessHandler(() => {
+                    document.getElementById('newAdminUser').value = '';
+                    document.getElementById('newAdminPass').value = '';
+                    loadAdminList();
+                })
+                .withFailureHandler(err => alert('新增失敗: ' + err.message))
+                .api_adminCreateAdmin(AUTH_TOKEN, u, p, role);
+        }
+
+        function deleteAdmin(target) {
+            if (!confirm(`確定要刪除管理員 ${target} 嗎？`)) return;
+            google.script.run
+                .withSuccessHandler(() => {
+                    loadAdminList();
+                })
+                .withFailureHandler(err => alert('刪除失敗: ' + err.message))
+                .api_adminDeleteAdmin(AUTH_TOKEN, target);
+        }
+
+        function resetAdminPassword(target) {
+            const newPass = prompt(`請輸入 ${target} 的新密碼：`);
+            if (newPass === null) return; // Cancelled
+            if (!newPass) return alert('密碼不能為空');
+
+            google.script.run
+                .withSuccessHandler(() => {
+                    alert(`已重置 ${target} 的密碼`);
+                })
+                .withFailureHandler(err => alert('重置失敗: ' + err.message))
+                .api_adminResetPassword(AUTH_TOKEN, target, newPass);
+        }
+
+        function toggleShowKey(id) {
+            const input = document.getElementById('sysAiApiKey');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        function resetUploadFolderTestResult() {
+            const result = document.getElementById('uploadFolderTestResult');
+            result.textContent = '';
+            result.className = 'text-xs text-slate-500 mt-2 hidden';
+        }
+
+        function setUploadFolderTestResult(message, isSuccess) {
+            const result = document.getElementById('uploadFolderTestResult');
+            result.textContent = message;
+            result.className = `text-xs mt-2 ${isSuccess ? 'text-emerald-600' : 'text-rose-600'}`;
+        }
+
+        function testUploadFolder() {
+            const folderId = document.getElementById('sysFolderId').value.trim();
+            if (!folderId) {
+                setUploadFolderTestResult('Enter an Upload Folder ID first.', false);
+                return;
+            }
+
+            const btn = document.getElementById('testUploadFolderBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+            setUploadFolderTestResult('Checking folder access, upload, and sharing permissions...', true);
+
+            google.script.run
+                .withSuccessHandler(result => {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    setUploadFolderTestResult(
+                        `${result.message} Temporary file moved to trash. Folder ID: ${result.folderId}`,
+                        true
+                    );
+                })
+                .withFailureHandler(err => {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    setUploadFolderTestResult(`Test failed: ${err.message}`, false);
+                })
+                .adminTestUploadFolder(AUTH_TOKEN, folderId);
+        }
+
+        function saveSystemSettings() {
+            const payload = {
+                // Removed ADMIN_EMAILS
+                AI_PROVIDER: document.getElementById('sysAiProvider').value,
+                AI_API_KEY: document.getElementById('sysAiApiKey').value.trim(),
+                UPLOAD_FOLDER_ID: document.getElementById('sysFolderId').value.trim(),
+            };
+
+            google.script.run
+                .withSuccessHandler(() => {
+                    alert('系統設定已儲存');
+                    document.getElementById('settingsModal').classList.add('hidden');
+                })
+                .withFailureHandler(err => alert('儲存失敗: ' + err.message))
+                .adminUpdateSettings(AUTH_TOKEN, payload);
+        }
+
+        function copyLink() {
+            navigator.clipboard.writeText(document.getElementById('joinLink').value);
+        }
+
+    </script>
+    <?!= include('IrsUi'); ?>
+</body>
+
+</html>

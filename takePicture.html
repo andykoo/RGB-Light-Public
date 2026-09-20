@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拍照與裁切</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- Cropper.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.1/dist/cropper.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.1/dist/cropper.min.js"></script>
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+
+        body {
+            background-color: #000;
+            color: #fff;
+            margin: 0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .camera-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .cropper-container {
+            background-color: #000;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" v-cloak class="h-screen flex flex-col relative">
+        <!-- 相機預覽區域 -->
+        <div v-if="!showCropModal" class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+            <video ref="cameraVideo" class="camera-preview transition-transform duration-300"
+                :style="{ transform: `rotate(${cameraRotation}deg)` }" autoplay playsinline></video>
+            <canvas ref="cameraCanvas" class="hidden"></canvas>
+
+            <!-- 控制按鈕層 -->
+            <div class="absolute bottom-10 left-0 right-0 flex justify-around items-center px-10">
+                <!-- 切換鏡頭 -->
+                <button @click="switchCamera"
+                    class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md">
+                    <i class="fa-solid fa-camera-rotate text-xl"></i>
+                </button>
+
+                <!-- 拍照按鈕 -->
+                <button @click="takePhoto"
+                    class="w-20 h-20 bg-white border-4 border-slate-300 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform">
+                    <div class="w-16 h-16 rounded-full border-2 border-black/10"></div>
+                </button>
+
+                <!-- 旋轉畫面 -->
+                <button @click="rotateCamera"
+                    class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md">
+                    <i class="fa-solid fa-rotate-right text-xl"></i>
+                </button>
+            </div>
+
+            <!-- 關閉按鈕 -->
+            <button @click="closeWindow"
+                class="absolute top-5 right-5 w-10 h-10 bg-black/50 rounded-full flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+
+        <!-- 裁切 Modal -->
+        <div v-if="showCropModal" class="fixed inset-0 bg-black z-50 flex flex-col">
+            <div class="flex-1 overflow-hidden relative cropper-container">
+                <img ref="cropperImage" :src="cropImageSrc" class="max-w-full block">
+            </div>
+            <div class="p-6 bg-slate-900 border-t border-slate-800 flex justify-between gap-4">
+                <button @click="cancelCrop"
+                    class="flex-1 py-4 border border-slate-600 rounded-xl font-bold text-lg hover:bg-slate-800 transition">
+                    取消並重拍
+                </button>
+                <button @click="confirmCrop"
+                    class="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i> 確認裁切
+                </button>
+            </div>
+        </div>
+
+        <!-- 載入中遮罩 -->
+        <div v-if="loading" class="fixed inset-0 bg-black/80 z-[60] flex flex-col items-center justify-center gap-4">
+            <i class="fa-solid fa-spinner fa-spin text-4xl text-indigo-500"></i>
+            <p class="font-bold">處裡中...</p>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    showCamera: true,
+                    isCameraActive: false,
+                    cameraFacingMode: 'environment', // 預設使用環境鏡頭（後鏡頭）
+                    cameraRotation: 0,
+                    stream: null,
+                    capturedImage: null,
+                    cropImageSrc: '',
+                    showCropModal: false,
+                    cropperInstance: null,
+                    loading: false,
+                    videoDevices: [],
+                    selectedDeviceId: ''
+                }
+            },
+            mounted() {
+                this.initCamera();
+            },
+            methods: {
+                async getVideoDevices() {
+                    try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        this.videoDevices = devices.filter(d => d.kind === 'videoinput');
+                    } catch (err) {
+                        console.error("Error getting devices:", err);
+                    }
+                },
+                async initCamera() {
+                    this.loading = true;
+                    this.capturedImage = null;
+                    this.isCameraActive = true;
+                    // 如果裝置列列表為空則獲取
+                    if (this.videoDevices.length === 0) {
+                        await this.getVideoDevices();
+                    }
+
+                    const constraints = {
+                        video: {
+                            width: { ideal: 2160 },
+                            height: { ideal: 4096 },
+                            facingMode: this.cameraFacingMode
+                        }
+                    };
+
+                    try {
+                        this.stopStream();
+                        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        this.stream = stream;
+
+                        this.$nextTick(() => {
+                            const video = this.$refs.cameraVideo;
+                            if (video) {
+                                video.srcObject = stream;
+                                video.onloadedmetadata = () => {
+                                    video.play();
+                                    this.loading = false;
+                                };
+                            }
+                        });
+                    } catch (err) {
+                        console.error("Camera access denied:", err);
+                        alert("無法存取相機，請檢查瀏覽器權限。");
+                        this.loading = false;
+                        this.closeWindow();
+                    }
+                },
+                stopStream() {
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop());
+                        this.stream = null;
+                    }
+                    this.isCameraActive = false;
+                },
+                switchCamera() {
+                    this.cameraFacingMode = (this.cameraFacingMode === 'user') ? 'environment' : 'user';
+                    this.initCamera();
+                },
+                rotateCamera() {
+                    this.cameraRotation = (this.cameraRotation + 90) % 360;
+                },
+                takePhoto() {
+                    const video = this.$refs.cameraVideo;
+                    const canvas = this.$refs.cameraCanvas;
+                    if (video && canvas) {
+                        const videoW = video.videoWidth;
+                        const videoH = video.videoHeight;
+
+                        // 計算 3:4 比例裁切
+                        const targetRatio = 3 / 4;
+                        let cropW, cropH, sx, sy;
+
+                        if (videoW / videoH > targetRatio) {
+                            cropH = videoH;
+                            cropW = videoH * targetRatio;
+                            sx = (videoW - cropW) / 2;
+                            sy = 0;
+                        } else {
+                            cropW = videoW;
+                            cropH = videoW / targetRatio;
+                            sx = 0;
+                            sy = (videoH - cropH) / 2;
+                        }
+
+                        const ctx = canvas.getContext('2d');
+                        ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+                        // 根據旋轉角度調整 canvas 尺寸
+                        if (this.cameraRotation === 90 || this.cameraRotation === 270) {
+                            canvas.width = cropH;
+                            canvas.height = cropW;
+                        } else {
+                            canvas.width = cropW;
+                            canvas.height = cropH;
+                        }
+
+                        // 套用旋轉效果
+                        if (this.cameraRotation === 90) {
+                            ctx.translate(cropH, 0);
+                            ctx.rotate(90 * Math.PI / 180);
+                        } else if (this.cameraRotation === 180) {
+                            ctx.translate(cropW, cropH);
+                            ctx.rotate(180 * Math.PI / 180);
+                        } else if (this.cameraRotation === 270) {
+                            ctx.translate(0, cropW);
+                            ctx.rotate(270 * Math.PI / 180);
+                        }
+
+                        ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+
+                        this.stopStream();
+                        this.openCropper(dataUrl);
+                    }
+                },
+                openCropper(imageSrc) {
+                    this.cropImageSrc = imageSrc;
+                    this.showCropModal = true;
+                    this.$nextTick(() => {
+                        this.initCropper();
+                    });
+                },
+                initCropper() {
+                    const image = this.$refs.cropperImage;
+                    if (this.cropperInstance) {
+                        this.cropperInstance.destroy();
+                    }
+                    this.cropperInstance = new Cropper(image, {
+                        aspectRatio: 3 / 4,
+                        viewMode: 1,
+                        dragMode: 'move',
+                        autoCropArea: 1,
+                        background: false,
+                        modal: true,
+                        guides: true,
+                        highlight: false,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                    });
+                },
+                confirmCrop() {
+                    if (this.cropperInstance) {
+                        const canvas = this.cropperInstance.getCroppedCanvas({
+                            maxWidth: 1920,
+                            maxHeight: 1920
+                        });
+                        if (canvas) {
+                            const finalDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                            // 透過 postMessage 回傳結果
+                            if (window.opener) {
+                                window.opener.postMessage({ type: 'TAKE_PICTURE_RESULT', data: finalDataUrl }, '*');
+                            } else if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'TAKE_PICTURE_RESULT', data: finalDataUrl }, '*');
+                            }
+                            // 這裡可以選擇不自動關閉，讓使用者預覽
+                            alert("拍照完成，已回傳資料！");
+                            this.closeWindow();
+                        }
+                    }
+                },
+                cancelCrop() {
+                    this.showCropModal = false;
+                    this.cropImageSrc = '';
+                    if (this.cropperInstance) {
+                        this.cropperInstance.destroy();
+                        this.cropperInstance = null;
+                    }
+                    this.initCamera();
+                },
+                closeWindow() {
+                    this.stopStream();
+                    // 嘗試關閉視窗 (如果是 window.open 打開的)
+                    window.close();
+                    // 如果是在 iframe 中，發送關閉通知
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'TAKE_PICTURE_CLOSE' }, '*');
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

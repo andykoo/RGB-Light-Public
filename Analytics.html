@@ -1,0 +1,136 @@
+<script>
+    // analytics.js - 用於紀錄使用者行為事件
+    // 依照 implementation_plan 中的需求，包含：
+    // ip_address, activity_id, activity_name, student_count, event_type, timestamp, local_time, category
+
+    const Analytics = (function () {
+        // 事件緩衝區
+        const _eventQueue = [];
+
+        // 批次上傳設定
+        const BATCH_SIZE = 10;
+        const FLUSH_INTERVAL_MS = 5000;
+
+        let _flushTimer = null;
+        let _clientIp = '';
+
+        // 取得 IP
+        function _fetchIp() {
+            if (_clientIp) return Promise.resolve(_clientIp);
+            return fetch('https://api64.ipify.org?format=json')
+                .then(res => res.json())
+                .then(data => {
+                    _clientIp = data.ip || '';
+                    return _clientIp;
+                })
+                .catch(err => {
+                    console.warn('無法取得 IP', err);
+                    return '';
+                });
+        }
+
+        _fetchIp(); // 提早取得
+
+        /**
+         * 送出事件批次至後端 API
+         */
+        function _flushEvents() {
+            if (_eventQueue.length === 0) return;
+            const payload = _eventQueue.splice(0, _eventQueue.length);
+
+            google.script.run
+                .withFailureHandler(err => {
+                    console.error('上傳日誌失敗', err);
+                    // 若送出失敗，重新放回佇列的開頭以免遺失
+                    _eventQueue.unshift(...payload);
+                })
+                .api_logEvents(payload); // 稍後在 Code.gs 中實作
+        }
+
+        /**
+         * 初始化自動 flush 計時器
+         */
+        function _initFlushTimer() {
+            if (_flushTimer) return;
+            _flushTimer = setInterval(_flushEvents, FLUSH_INTERVAL_MS);
+        }
+
+        /**
+         * 獲取瀏覽器與裝置資訊
+         */
+        function _getDeviceInfo() {
+            return JSON.stringify({
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                screenWidth: window.screen.width,
+                screenHeight: window.screen.height
+            });
+        }
+
+        /**
+         * 追蹤單一事件
+         * @param {string} eventType 事件類型
+         * @param {Object} data 附加資料，會與共用欄位合併
+         */
+        function trackEvent(eventType, data = {}) {
+            _initFlushTimer();
+
+            let determinedCategory = '';
+            if (data.category) {
+                determinedCategory = data.category;
+            } else {
+                // 嘗試自動偵測
+                if (typeof ROLE !== 'undefined') {
+                    if (ROLE === 'GUEST') determinedCategory = 'guest';
+                    else if (ROLE === 'ADMIN') determinedCategory = 'login';
+                    else determinedCategory = 'student';
+                } else {
+                    determinedCategory = 'guest'; // 預設
+                }
+            }
+
+            const now = new Date();
+            const tzOffset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - tzOffset)).toISOString().slice(0, -1);
+
+            const event = {
+                timestamp: now.toISOString(),
+                local_time: localISOTime.replace('T', ' ').substring(0, 19),
+                event_type: eventType,
+                ip_address: _clientIp,
+                category: determinedCategory,
+                activity_id: data.activity_id || (typeof currentActivityCode !== 'undefined' ? currentActivityCode : ''),
+                activity_name: data.activity_name || (typeof currentActivity !== 'undefined' && currentActivity ? currentActivity.activityName : ''),
+                student_count: data.student_count || (typeof currentActivity !== 'undefined' && currentActivity && currentActivity.studentCount ? currentActivity.studentCount : 0),
+                device_info: _getDeviceInfo(),
+                payload: {}
+            };
+
+            // 將不在上方定義的額外屬性放入 payload
+            for (const key in data) {
+                if (!['category', 'activity_id', 'activity_name', 'student_count', 'payload'].includes(key)) {
+                    event.payload[key] = data[key];
+                }
+            }
+
+            event.payload = JSON.stringify(event.payload);
+
+            _eventQueue.push(event);
+
+            // 若達到批次大小立即送出
+            if (_eventQueue.length >= BATCH_SIZE) {
+                _flushEvents();
+            }
+        }
+
+        // 在頁面卸載前確保所有事件已送出
+        window.addEventListener('beforeunload', () => {
+            _flushEvents();
+        });
+
+        return {
+            trackEvent: trackEvent,
+            flush: _flushEvents
+        };
+    })();
+</script>
