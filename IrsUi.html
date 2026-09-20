@@ -93,7 +93,13 @@
 
   let irsHostedSpeechRequest = null;
   let rgbHostedCameraRequest = null;
-  const RGB_HOSTED_TOOL_ORIGIN = 'https://rgb-production.web.app';
+  const RGB_HOSTED_TOOL_DEFAULT_ORIGIN = 'https://rgb-production.web.app';
+  const RGB_HOSTED_TOOL_CONFIGURED_ORIGIN = <?!= JSON.stringify(PropertiesService.getScriptProperties().getProperty('RGB_HOSTED_TOOL_ORIGIN')) ?>;
+  const RGB_HOSTED_TOOL_ORIGIN = String(
+    RGB_HOSTED_TOOL_CONFIGURED_ORIGIN === null
+      ? RGB_HOSTED_TOOL_DEFAULT_ORIGIN
+      : RGB_HOSTED_TOOL_CONFIGURED_ORIGIN
+  ).trim().replace(/\/+$/, '');
 
   function createRgbHostedToolNonce() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
@@ -103,6 +109,10 @@
   function startIrsSpeechInput(targetId, button) {
     const target = document.getElementById(targetId);
     if (!target) return;
+    if (!RGB_HOSTED_TOOL_ORIGIN) {
+      alert('尚未設定語音／相機輔助服務網址。請在 Apps Script 專案設定中設定 RGB_HOSTED_TOOL_ORIGIN。');
+      return;
+    }
     const nonce = createRgbHostedToolNonce();
     const helperUrl = `${RGB_HOSTED_TOOL_ORIGIN}/speech/?nonce=${encodeURIComponent(nonce)}&origin=${encodeURIComponent(window.location.origin)}`;
     const popup = window.open(helperUrl, `rgbSpeechInput_${nonce}`, 'popup=yes,width=560,height=760,resizable=yes,scrollbars=yes');
@@ -117,6 +127,10 @@
   }
 
   function startRgbHostedCamera(mode) {
+    if (!RGB_HOSTED_TOOL_ORIGIN) {
+      alert('尚未設定語音／相機輔助服務網址。請在 Apps Script 專案設定中設定 RGB_HOSTED_TOOL_ORIGIN。');
+      return false;
+    }
     const nonce = createRgbHostedToolNonce();
     const helperUrl = `${RGB_HOSTED_TOOL_ORIGIN}/camera/?nonce=${encodeURIComponent(nonce)}&origin=${encodeURIComponent(window.location.origin)}`;
     const popup = window.open(helperUrl, `rgbCamera_${nonce}`, 'popup=yes,width=720,height=860,resizable=yes,scrollbars=yes');

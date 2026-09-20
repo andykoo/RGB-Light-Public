@@ -7,22 +7,34 @@
 function auth_init_() {
   const count = db_countAdmins_();
   if (count === 0) {
-    // defaults
     const salt = auth_generateSalt_();
-    const pass = 'admin1234';
+    const pass = auth_generateInitialPassword_();
     const hash = auth_hash_(pass, salt);
     
     db_createAdmin_({
       username: 'admin',
       passwordHash: hash,
       salt: salt,
-      passwordHash: hash,
-      salt: salt,
       isDefaultPassword: true,
       role: 'SUPER_ADMIN'
     });
-    console.log('Default admin created: admin / admin1234');
+    console.log('Initial admin credentials (shown once): username=admin password=' + pass);
   }
+}
+
+/** Generate a one-time, high-entropy password for the first administrator. */
+function auth_generateInitialPassword_() {
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    Utilities.getUuid() + Utilities.getUuid() + Date.now()
+  );
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  let password = '';
+  for (let i = 0; i < 24; i++) {
+    const value = (bytes[i] + 256) % 256;
+    password += alphabet.charAt(value % alphabet.length);
+  }
+  return password;
 }
 
 /**
