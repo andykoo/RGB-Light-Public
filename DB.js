@@ -49,13 +49,26 @@ function db_getSpreadsheet_() {
 
   if (sid) return SpreadsheetApp.openById(sid);
 
-  // If bound spreadsheet exists, use it; else create a new one
+  // A container-bound project can use its attached spreadsheet directly.
+  // A standalone project returns null here, so create a dedicated database sheet.
+  let boundSpreadsheet = null;
   try {
-    return SpreadsheetApp.getActiveSpreadsheet();
-  } catch (e) {
-    const ss = SpreadsheetApp.create('CodeGym_DB');
+    boundSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {}
+  if (boundSpreadsheet) return boundSpreadsheet;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // Another first request may have created and stored the database already.
+    const storedId = props.getProperty('SPREADSHEET_ID');
+    if (storedId) return SpreadsheetApp.openById(storedId);
+
+    const ss = SpreadsheetApp.create('RGBPublic_DB');
     props.setProperty('SPREADSHEET_ID', ss.getId());
     return ss;
+  } finally {
+    lock.releaseLock();
   }
 }
 

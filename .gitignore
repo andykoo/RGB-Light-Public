@@ -1,5 +1,6 @@
 .clasp.json
 .clasprc.json
+*.gsheet
 node_modules/
 .env
 .env.*

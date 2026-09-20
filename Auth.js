@@ -6,35 +6,49 @@
  */
 function auth_init_() {
   const count = db_countAdmins_();
-  if (count === 0) {
+  if (count === 0) throw new Error('尚未初始化系統。請由部署者在 Apps Script 編輯器執行 initializeRgbPublic。');
+}
+
+/** Initialize a copied database and create the first admin using an owner-provided password. */
+function initializeRgbPublic() {
+  const activeEmail = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  const effectiveEmail = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+  if (!activeEmail || !effectiveEmail || activeEmail !== effectiveEmail) {
+    throw new Error('為保護資料庫，只能由 Apps Script 專案擁有者在編輯器中執行初始化。');
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const spreadsheet = db_getSpreadsheet_();
+  db_ensureSheetsAndHeaders_(SHEET_NAMES, HEADERS);
+  db_initSystemConfig_();
+
+  let adminCreated = false;
+  if (db_countAdmins_() === 0) {
+    const initialPassword = props.getProperty('RGB_INITIAL_ADMIN_PASSWORD');
+    if (!initialPassword) {
+      throw new Error('請先在「專案設定 > 指令碼屬性」設定 RGB_INITIAL_ADMIN_PASSWORD，再重新執行初始化。');
+    }
+    auth_validatePasswordComplexity_(initialPassword);
     const salt = auth_generateSalt_();
-    const pass = auth_generateInitialPassword_();
-    const hash = auth_hash_(pass, salt);
-    
     db_createAdmin_({
       username: 'admin',
-      passwordHash: hash,
+      passwordHash: auth_hash_(initialPassword, salt),
       salt: salt,
       isDefaultPassword: true,
       role: 'SUPER_ADMIN'
     });
-    console.log('Initial admin credentials (shown once): username=admin password=' + pass);
+    adminCreated = true;
   }
-}
 
-/** Generate a one-time, high-entropy password for the first administrator. */
-function auth_generateInitialPassword_() {
-  const bytes = Utilities.computeDigest(
-    Utilities.DigestAlgorithm.SHA_256,
-    Utilities.getUuid() + Utilities.getUuid() + Date.now()
-  );
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
-  let password = '';
-  for (let i = 0; i < 24; i++) {
-    const value = (bytes[i] + 256) % 256;
-    password += alphabet.charAt(value % alphabet.length);
-  }
-  return password;
+  // Do not leave the initial plaintext password in Script Properties after setup.
+  props.deleteProperty('RGB_INITIAL_ADMIN_PASSWORD');
+  return {
+    success: true,
+    databaseName: spreadsheet.getName(),
+    databaseUrl: spreadsheet.getUrl(),
+    adminCreated: adminCreated,
+    adminUsername: 'admin'
+  };
 }
 
 /**
