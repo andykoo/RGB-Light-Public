@@ -31,8 +31,8 @@ IRS 語音輸入與即時相機會開啟外部輔助網站。預設網址為 `ht
 
 ## 第一次安裝與初始化
 
-1. 在 Apps Script 建立本專案的個人副本。
-2. 建立「RGBPublic 資料庫空白模板」的個人副本，從網址複製試算表 ID。
+1. Clone [RGB-Light-Public](https://github.com/andykoo/RGB-Light-Public)，建立自己的 standalone Apps Script 專案，並用 `clasp push` 上傳程式檔（上方「使用 clasp」）。
+2. [建立 RGBPublic 資料庫空白模板的副本](https://docs.google.com/spreadsheets/d/1467N9gjCPosMPz-z7OktaweES-K-Unp-fcDGZgor-Eo/copy)，從副本網址複製試算表 ID。
 3. 在 Apps Script「專案設定 > 指令碼屬性」新增 `SPREADSHEET_ID`，值為資料庫副本 ID。
 4. 新增 `RGB_INITIAL_ADMIN_PASSWORD`，設定至少 8 碼且包含大寫、小寫、數字及特殊字元的密碼。此值只作首次初始化使用。
 5. 在編輯器選取 `initializeRgbPublic` 並按「執行」，授權 Apps Script 要求的服務。成功後會初始化資料表、建立 `admin` 管理員，並刪除 `RGB_INITIAL_ADMIN_PASSWORD` 屬性。重複執行不會覆寫現有資料或密碼。
